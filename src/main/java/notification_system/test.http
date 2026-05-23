@@ -3,9 +3,10 @@ Content-Type: application/json
 
 {
   "receiverId": "민경",
-  "message": "실패 테스트",
-  "eventId": "PAYMENT_FAIL_001",
-  "channel": "EMAIL"
+  "message": "예약 발송 테스트",
+  "eventId": "SCHEDULE_001",
+  "channel": "EMAIL",
+  "scheduledAt": "2026-05-23T23:42:00"
 }
 
 ###

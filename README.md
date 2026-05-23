@@ -11,7 +11,7 @@
 중복 발송 방지, 읽음 처리, 실패 이력 보관 기능을 제공합니다.
 
 또한 실제 운영 환경을 고려하여
-메시지 큐, 재시도 정책, DB 확장 가능성까지 함께 고민했습니다.
+메시지 큐, 예약 발송, 재시도 정책, DB 확장 가능성까지 함께 고민했습니다.
 
 ---
 
@@ -58,6 +58,18 @@ POST `/notifications`
 }
 ```
 
+예약 발송 예시:
+
+```json
+{
+  "receiverId":"민경",
+  "message":"예약 발송 테스트",
+  "eventId":"SCHEDULE_001",
+  "channel":"EMAIL",
+  "scheduledAt":"2026-05-24T00:10:00"
+}
+```
+
 ---
 
 ### 전체 조회
@@ -88,12 +100,6 @@ GET
 GET /users/{receiverId}/notifications
 ```
 
-예:
-
-```text
-/users/민경/notifications
-```
-
 ---
 
 ### 읽음 처리
@@ -116,7 +122,7 @@ PATCH /notifications/{id}/read
 
 기반 처리기로 구현했습니다.
 
-처리 흐름:
+흐름:
 
 ```text
 알림 요청
@@ -130,9 +136,6 @@ REQUESTED 저장
 SENT / FAILED
 ```
 
-즉 사용자 요청과 실제 발송 로직을 분리하여
-비동기 흐름을 구성했습니다.
-
 운영 환경에서는 Queue(Kafka, RabbitMQ) 전환 가능성을 고려했습니다.
 
 ---
@@ -141,7 +144,7 @@ SENT / FAILED
 
 실패 시 최대 3회 재시도.
 
-현재 구현:
+현재:
 
 ```text
 5초 간격
@@ -164,11 +167,11 @@ retryCount 증가
 최종 실패
 ```
 
-최종 실패 시:
+최종 실패:
 
-- FAILED 상태 유지
+- FAILED 유지
 - failureReason 저장
-- 추후 관리자 재처리 가능성 고려
+- 관리자 재처리 확장 가능
 
 ---
 
@@ -180,9 +183,9 @@ retryCount 증가
 5초 → 5초 → 5초
 ```
 
-운영 환경 개선 방향:
+개선 방향:
 
-지수 백오프(Exponential Backoff)
+지수 백오프
 
 예:
 
@@ -192,30 +195,20 @@ retryCount 증가
 3차 실패 → 5분
 ```
 
-서버 부하 감소 및 일시 장애 대응 가능.
-
 ---
 
 ### 중복 발송 방지 (멱등성)
 
-중복 기준:
+기준:
 
 ```text
 receiverId + eventId
 ```
 
-적용 방식:
+적용:
 
-- Service 중복 체크
+- Service 체크
 - DB Unique 제약
-
-중복 요청 발생 시:
-
-```text
-중복 알림 요청 - 저장하지 않음
-```
-
-처리.
 
 ---
 
@@ -225,8 +218,14 @@ receiverId + eventId
 
 빠른 개발 및 테스트 목적.
 
-운영 환경에서는 PostgreSQL / Aurora 전환 가능하도록
-JPA 기반으로 설계했습니다.
+운영 환경:
+
+```text
+PostgreSQL
+Aurora
+```
+
+전환 가능하도록 설계.
 
 ---
 
@@ -234,7 +233,7 @@ JPA 기반으로 설계했습니다.
 
 객체 중심 설계 가능.
 
-알림 상태:
+상태 관리:
 
 ```text
 REQUESTED
@@ -243,7 +242,7 @@ FAILED
 SENT
 ```
 
-와 같은 상태 관리 구현이 용이합니다.
+구현 용이.
 
 ---
 
@@ -253,13 +252,13 @@ SENT
 
 > 실제 메시지 브로커 설치 불필요
 
-조건을 만족하면서 비동기 구조를 구현할 수 있다고 판단했습니다.
+조건 충족 + 비동기 처리 구현 가능.
 
 ---
 
 ## DB 설계
 
-### Notification
+Notification
 
 | 컬럼 | 설명 |
 |------|------|
@@ -272,6 +271,9 @@ SENT
 | failureReason | 실패 이유 |
 | readStatus | 읽음 여부 |
 | channel | 발송 채널 |
+| scheduledAt | 예약 발송 시간 |
+
+---
 
 상태 흐름:
 
@@ -287,11 +289,27 @@ SENT
 FAILED
 ```
 
+예약 발송 흐름:
+
+```text
+REQUESTED
+↓
+scheduledAt 이전
+↓
+대기
+
+scheduledAt 도달
+↓
+PROCESSING
+↓
+SENT
+```
+
 ---
 
 ## H2 Database 확인
 
-H2 Console 접속:
+접속:
 
 ```text
 http://localhost:8080/h2-console
@@ -303,16 +321,17 @@ http://localhost:8080/h2-console
 SELECT * FROM NOTIFICATION;
 ```
 
-실제 저장 데이터 확인:
+실제 저장 데이터:
 
 ![H2 Console](docs/h2-console.png)
 
-해당 화면을 통해:
+확인 가능:
 
-- retryCount 확인
-- FAILED 상태 확인
-- failureReason 저장 확인
-- DB 저장 여부 확인
+- retryCount
+- FAILED 상태
+- failureReason
+- scheduledAt
+- DB 저장 여부
 
 ---
 
@@ -335,6 +354,7 @@ SELECT * FROM NOTIFICATION;
 - [x] DB 저장
 - [x] H2 Console 조회
 - [x] 테스트 코드 작성
+- [x] 예약 발송 구현
 
 ---
 
@@ -342,11 +362,11 @@ SELECT * FROM NOTIFICATION;
 
 작성 테스트:
 
-- 알림 저장 테스트
-- 중복 방지 테스트
-- 읽음 처리 테스트
-- 실패 처리 테스트
-- 상태 변경 테스트
+- 알림 저장
+- 중복 방지
+- 읽음 처리
+- 실패 처리
+- 상태 변경
 
 실행:
 
@@ -354,7 +374,7 @@ SELECT * FROM NOTIFICATION;
 ./gradlew test
 ```
 
-테스트 결과:
+결과:
 
 ```text
 BUILD SUCCESSFUL
@@ -365,17 +385,38 @@ BUILD SUCCESSFUL
 
 ## 선택 구현 반영 사항
 
+### 예약 발송
+
+scheduledAt 기준.
+
+```text
+현재 시간 < 예약 시간
+```
+
+↓
+
+대기
+
+↓
+
+```text
+현재 시간 >= 예약 시간
+```
+
+↓
+
+발송
+
+구현 완료.
+
+---
+
 ### 읽음 처리
 
-단일 상태 변경 방식으로 구현.
+단일 상태 변경 방식 구현.
 
-다중 기기 환경에서는 낙관적 락(Optimistic Lock) 또는 버전 관리 기반 충돌 방지가 필요할 수 있습니다.
-
-구현 API:
-
-```http
-PATCH /notifications/{id}/read
-```
+다중 기기 환경에서는
+낙관적 락(Optimistic Lock) 적용 가능.
 
 ---
 
@@ -388,17 +429,12 @@ FAILED 유지
 failureReason 저장
 ```
 
-운영 환경에서는 관리자 수동 재시도 API 추가 가능.
-
-재시도 정책에 따라 retryCount 초기화 여부를 정책화할 수 있습니다.
-
 ---
 
 ## 개선 가능 사항
 
 미구현:
 
-- [ ] 예약 발송 (scheduledAt)
 - [ ] 메시지 템플릿 관리
 - [ ] Queue(Kafka/RabbitMQ)
 - [ ] 지수 백오프
@@ -414,10 +450,9 @@ ChatGPT 활용:
 
 - 구조 설계
 - 상태 관리
-- 예외 처리
 - README 초안
-- 비동기 처리 아이디어
-- 재시도 정책 개선 방향
 - 테스트 코드 아이디어
+- 재시도 정책 개선
+- 예약 발송 구조 아이디어
 
-최종 구현, 테스트 코드 작성 및 검증은 직접 수행했습니다.# notification-system
+최종 구현, 테스트 및 검증은 직접 수행했습니다.

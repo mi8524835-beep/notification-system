@@ -35,7 +35,8 @@ public class NotificationController {
                         request.getMessage(),
                         request.getEventId(),
                         NotificationStatus.REQUESTED,
-                        request.getChannel()
+                        request.getChannel(),
+                        request.getScheduledAt()
                 );
 
         service.send(notification);

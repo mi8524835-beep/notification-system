@@ -24,12 +24,16 @@ public class NotificationProcessor {
                 repository.findAll()
                         .stream()
                         .filter(notification ->
-                                notification.getStatus() == NotificationStatus.REQUESTED
-                                        ||
-                                        (
-                                                notification.getStatus() == NotificationStatus.FAILED
-                                                        && notification.getRetryCount() < 3
-                                        )
+                                (
+                                        notification.getStatus() == NotificationStatus.REQUESTED
+                                                ||
+                                                (
+                                                        notification.getStatus() == NotificationStatus.FAILED
+                                                                && notification.getRetryCount() < 3
+                                                )
+                                )
+                                        &&
+                                        notification.isReadyToSend()
                         )
                         .toList();
 

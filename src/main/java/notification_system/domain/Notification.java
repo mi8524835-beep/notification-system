@@ -9,6 +9,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(
         uniqueConstraints = {
@@ -35,6 +37,8 @@ public class Notification {
 
     private String failureReason;
 
+    private LocalDateTime scheduledAt;
+
     @Enumerated(EnumType.STRING)
     private NotificationStatus status;
 
@@ -56,6 +60,23 @@ public class Notification {
         this.eventId = eventId;
         this.status = status;
         this.channel = channel;
+        this.scheduledAt = LocalDateTime.now();
+    }
+
+    public Notification(
+            String receiverId,
+            String message,
+            String eventId,
+            NotificationStatus status,
+            NotificationChannel channel,
+            LocalDateTime scheduledAt
+    ) {
+        this.receiverId = receiverId;
+        this.message = message;
+        this.eventId = eventId;
+        this.status = status;
+        this.channel = channel;
+        this.scheduledAt = scheduledAt;
     }
 
     public String getReceiverId() {
@@ -92,6 +113,16 @@ public class Notification {
 
     public String getFailureReason() {
         return failureReason;
+    }
+
+    public LocalDateTime getScheduledAt() {
+        return scheduledAt;
+    }
+
+    public boolean isReadyToSend() {
+        return scheduledAt == null
+                || scheduledAt.isBefore(LocalDateTime.now())
+                || scheduledAt.isEqual(LocalDateTime.now());
     }
 
     public void markAsSent() {
