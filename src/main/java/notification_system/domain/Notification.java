@@ -142,4 +142,10 @@ public class Notification {
         this.failureReason = reason;
         this.retryCount++;
     }
+
+    public void retry() {
+        this.status = NotificationStatus.REQUESTED;
+        this.retryCount = 0;
+        this.failureReason = null;
+    }
 }

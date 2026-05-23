@@ -1,7 +1,6 @@
 package notification_system.controller;
 
 import notification_system.domain.Notification;
-import notification_system.domain.NotificationChannel;
 import notification_system.domain.NotificationStatus;
 import notification_system.dto.NotificationRequest;
 import notification_system.repository.NotificationRepository;
@@ -70,6 +69,21 @@ public class NotificationController {
         notificationRepository.save(notification);
 
         return "읽음 처리 완료";
+    }
+
+    @PatchMapping("/notifications/{id}/retry")
+    public String retryNotification(
+            @PathVariable Long id
+    ) {
+        Notification notification =
+                notificationRepository.findById(id)
+                        .orElseThrow();
+
+        notification.retry();
+
+        notificationRepository.save(notification);
+
+        return "수동 재시도 요청 완료";
     }
 
     @GetMapping("/users/{receiverId}/notifications")

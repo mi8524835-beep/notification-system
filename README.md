@@ -4,14 +4,13 @@
 
 이 프로젝트는 이벤트 기반 알림 발송 시스템입니다.
 
-사용자가 결제, 수강 신청 등의 이벤트를 발생시키면
-알림 요청을 저장하고 비동기 처리기를 통해 알림을 발송합니다.
+사용자가 결제, 수강 신청 등의 이벤트를 발생시키면 알림 요청을 저장하고,
+비동기 처리기를 통해 알림을 발송합니다.
 
 실패 시 재시도 정책을 적용하며,
-중복 발송 방지, 읽음 처리, 실패 이력 보관 기능을 제공합니다.
+중복 발송 방지, 읽음 처리, 예약 발송, 실패 이력 보관 및 수동 재시도 기능을 제공합니다.
 
-또한 실제 운영 환경을 고려하여
-메시지 큐, 예약 발송, 재시도 정책, DB 확장 가능성까지 함께 고민했습니다.
+또한 실제 운영 환경을 고려하여 메시지 큐, 재시도 정책, DB 확장 가능성까지 함께 고민했습니다.
 
 ---
 
@@ -47,8 +46,6 @@
 
 POST `/notifications`
 
-예시:
-
 ```json
 {
   "receiverId":"민경",
@@ -66,15 +63,13 @@ POST `/notifications`
   "message":"예약 발송 테스트",
   "eventId":"SCHEDULE_001",
   "channel":"EMAIL",
-  "scheduledAt":"2026-05-24T00:10:00"
+  "scheduledAt":"2026-05-24T00:22:00"
 }
 ```
 
 ---
 
 ### 전체 조회
-
-GET
 
 ```http
 GET /notifications
@@ -84,8 +79,6 @@ GET /notifications
 
 ### 단건 조회
 
-GET
-
 ```http
 GET /notifications/{id}
 ```
@@ -94,20 +87,38 @@ GET /notifications/{id}
 
 ### 사용자별 조회
 
-GET
-
 ```http
 GET /users/{receiverId}/notifications
+```
+
+한글 receiverId 사용 시 URL 인코딩 필요:
+
+```http
+GET /users/%EB%AF%BC%EA%B2%BD/notifications
+```
+
+---
+
+### 읽음 필터 조회
+
+```http
+GET /users/{receiverId}/notifications?readStatus=true
 ```
 
 ---
 
 ### 읽음 처리
 
-PATCH
-
 ```http
 PATCH /notifications/{id}/read
+```
+
+---
+
+### 수동 재시도
+
+```http
+PATCH /notifications/{id}/retry
 ```
 
 ---
@@ -116,11 +127,7 @@ PATCH /notifications/{id}/read
 
 ### 비동기 처리
 
-실제 메시지 브로커(Kafka, RabbitMQ)는 사용하지 않고
-
-`@Scheduled`
-
-기반 처리기로 구현했습니다.
+실제 메시지 브로커(Kafka, RabbitMQ)는 사용하지 않고 `@Scheduled` 기반 처리기로 구현했습니다.
 
 흐름:
 
@@ -140,18 +147,27 @@ SENT / FAILED
 
 ---
 
-### 재시도 정책
+### 예약 발송
 
-실패 시 최대 3회 재시도.
-
-현재:
+`scheduledAt` 값을 기준으로 예약 발송을 처리합니다.
 
 ```text
-5초 간격
-최대 3회
+현재 시간 < scheduledAt
+↓
+대기
+
+현재 시간 >= scheduledAt
+↓
+PROCESSING
+↓
+SENT
 ```
 
-흐름:
+---
+
+### 재시도 정책
+
+실패 시 최대 3회 재시도합니다.
 
 ```text
 REQUESTED
@@ -167,27 +183,43 @@ retryCount 증가
 최종 실패
 ```
 
-최종 실패:
+최종 실패 시:
 
-- FAILED 유지
+- FAILED 상태 유지
 - failureReason 저장
-- 관리자 재처리 확장 가능
+- 수동 재시도 API를 통해 다시 REQUESTED 상태로 전환 가능
+
+---
+
+### 수동 재시도 정책
+
+최종 실패한 알림은 수동 재시도할 수 있습니다.
+
+```text
+FAILED
+retryCount = 3
+failureReason 존재
+
+↓ PATCH /notifications/{id}/retry
+
+REQUESTED
+retryCount = 0
+failureReason = null
+```
+
+재시도 횟수는 초기화하는 정책으로 구현했습니다.
 
 ---
 
 ### 재시도 개선 가능성
 
-현재:
+현재는 고정 간격 재시도 방식입니다.
 
 ```text
 5초 → 5초 → 5초
 ```
 
-개선 방향:
-
-지수 백오프
-
-예:
+운영 환경에서는 지수 백오프 방식으로 개선할 수 있습니다.
 
 ```text
 1차 실패 → 5초
@@ -197,17 +229,17 @@ retryCount 증가
 
 ---
 
-### 중복 발송 방지 (멱등성)
+### 중복 발송 방지
 
-기준:
+중복 기준:
 
 ```text
 receiverId + eventId
 ```
 
-적용:
+적용 방식:
 
-- Service 체크
+- Service 중복 체크
 - DB Unique 제약
 
 ---
@@ -216,24 +248,17 @@ receiverId + eventId
 
 ### 왜 H2 사용?
 
-빠른 개발 및 테스트 목적.
+빠른 개발 및 테스트 목적입니다.
 
-운영 환경:
-
-```text
-PostgreSQL
-Aurora
-```
-
-전환 가능하도록 설계.
+운영 환경에서는 PostgreSQL 또는 Aurora로 전환 가능하도록 JPA 기반으로 설계했습니다.
 
 ---
 
 ### 왜 JPA 사용?
 
-객체 중심 설계 가능.
+객체 중심 설계가 가능하고, 알림 상태 전이 관리에 적합하다고 판단했습니다.
 
-상태 관리:
+상태:
 
 ```text
 REQUESTED
@@ -242,23 +267,18 @@ FAILED
 SENT
 ```
 
-구현 용이.
-
 ---
 
 ### 왜 @Scheduled 사용?
 
-과제 조건:
-
-> 실제 메시지 브로커 설치 불필요
-
-조건 충족 + 비동기 처리 구현 가능.
+과제 조건에서 실제 메시지 브로커 설치가 필수는 아니므로,
+`@Scheduled`를 사용해 비동기 처리 구조를 구현했습니다.
 
 ---
 
 ## DB 설계
 
-Notification
+### Notification
 
 | 컬럼 | 설명 |
 |------|------|
@@ -272,38 +292,6 @@ Notification
 | readStatus | 읽음 여부 |
 | channel | 발송 채널 |
 | scheduledAt | 예약 발송 시간 |
-
----
-
-상태 흐름:
-
-```text
-REQUESTED
-↓
-PROCESSING
-↓
-SENT
-
-또는
-
-FAILED
-```
-
-예약 발송 흐름:
-
-```text
-REQUESTED
-↓
-scheduledAt 이전
-↓
-대기
-
-scheduledAt 도달
-↓
-PROCESSING
-↓
-SENT
-```
 
 ---
 
@@ -337,24 +325,24 @@ SELECT * FROM NOTIFICATION;
 
 ## 구현 완료 기능
 
-완료:
-
 - [x] 알림 생성 API
 - [x] 전체 조회
 - [x] 단건 조회
 - [x] 사용자별 조회
+- [x] 읽음 필터 조회
 - [x] 읽음 처리
 - [x] 상태 관리
 - [x] 실패 처리
 - [x] 재시도
 - [x] 최종 실패 처리
 - [x] 실패 이력 저장
+- [x] 수동 재시도
 - [x] 중복 발송 방지
 - [x] 비동기 처리
+- [x] 예약 발송
 - [x] DB 저장
 - [x] H2 Console 조회
 - [x] 테스트 코드 작성
-- [x] 예약 발송 구현
 
 ---
 
@@ -387,59 +375,36 @@ BUILD SUCCESSFUL
 
 ### 예약 발송
 
-scheduledAt 기준.
-
-```text
-현재 시간 < 예약 시간
-```
-
-↓
-
-대기
-
-↓
-
-```text
-현재 시간 >= 예약 시간
-```
-
-↓
-
-발송
-
-구현 완료.
+`scheduledAt` 기준으로 예약 시간 도달 후 발송되도록 구현했습니다.
 
 ---
 
 ### 읽음 처리
 
-단일 상태 변경 방식 구현.
+단일 상태 변경 방식으로 구현했습니다.
 
-다중 기기 환경에서는
-낙관적 락(Optimistic Lock) 적용 가능.
+다중 기기 환경에서는 낙관적 락 또는 버전 관리 기반 충돌 방지가 필요할 수 있습니다.
 
 ---
 
-### 최종 실패 보관
+### 최종 실패 보관 및 수동 재시도
 
-최대 재시도 이후:
+최대 재시도 이후 FAILED 상태와 failureReason을 유지합니다.
 
-```text
-FAILED 유지
-failureReason 저장
-```
+수동 재시도 시:
+
+- status를 REQUESTED로 변경
+- retryCount를 0으로 초기화
+- failureReason을 null로 초기화
 
 ---
 
 ## 개선 가능 사항
 
-미구현:
-
 - [ ] 메시지 템플릿 관리
 - [ ] Queue(Kafka/RabbitMQ)
 - [ ] 지수 백오프
 - [ ] 다중 인스턴스 환경
-- [ ] 관리자 재발송 기능
 - [ ] 동시 읽음 처리 충돌 방지
 
 ---
@@ -454,5 +419,6 @@ ChatGPT 활용:
 - 테스트 코드 아이디어
 - 재시도 정책 개선
 - 예약 발송 구조 아이디어
+- 수동 재시도 API 아이디어
 
 최종 구현, 테스트 및 검증은 직접 수행했습니다.
