@@ -1,0 +1,17 @@
+POST http://localhost:8080/notifications
+Content-Type: application/json
+
+{
+  "receiverId": "민경",
+  "message": "실패 테스트",
+  "eventId": "PAYMENT_FAIL_001",
+  "channel": "EMAIL"
+}
+
+###
+
+PATCH http://localhost:8080/notifications/1/read
+
+###
+
+GET http://localhost:8080/notifications
