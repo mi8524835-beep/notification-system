@@ -22,16 +22,11 @@ class NotificationServiceTest {
     NotificationRepository repository;
 
 
-    // 테스트마다 DB 초기화
     @BeforeEach
     void clear() {
         repository.deleteAll();
     }
 
-
-    // ==========================
-    // 1. 알림 저장 테스트
-    // ==========================
 
     @Test
     void 알림저장테스트() {
@@ -55,10 +50,6 @@ class NotificationServiceTest {
         ).isEqualTo("민경");
     }
 
-
-    // ==========================
-    // 2. 중복 방지 테스트
-    // ==========================
 
     @Test
     void 중복알림은저장하지않는다() {
@@ -90,10 +81,6 @@ class NotificationServiceTest {
     }
 
 
-    // ==========================
-    // 3. 읽음 처리 테스트
-    // ==========================
-
     @Test
     void 읽음처리테스트() {
 
@@ -113,10 +100,6 @@ class NotificationServiceTest {
         ).isTrue();
     }
 
-
-    // ==========================
-    // 4. 실패 처리 테스트
-    // ==========================
 
     @Test
     void 실패시재시도횟수증가() {
@@ -146,10 +129,6 @@ class NotificationServiceTest {
     }
 
 
-    // ==========================
-    // 5. 상태 변경 테스트
-    // ==========================
-
     @Test
     void 상태변경테스트() {
 
@@ -171,4 +150,32 @@ class NotificationServiceTest {
         );
     }
 
+
+    @Test
+    void 템플릿메시지테스트() {
+
+        assertThat(
+                NotificationTemplate.PAYMENT_SUCCESS.getMessage()
+        ).isEqualTo("결제가 완료되었습니다.");
+    }
+
+
+    @Test
+    void 실패시다음재시도시간이설정된다() {
+
+        Notification notification =
+                new Notification(
+                        "민경",
+                        "실패",
+                        "EVENT_FAIL_RETRY",
+                        NotificationStatus.REQUESTED,
+                        NotificationChannel.EMAIL
+                );
+
+        notification.markAsFailed("서버 오류");
+
+        assertThat(
+                notification.getNextRetryAt()
+        ).isNotNull();
+    }
 }
