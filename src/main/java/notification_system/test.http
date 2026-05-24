@@ -54,7 +54,7 @@ Content-Type: application/json
 {
   "receiverId":"민경",
   "message":"실패 테스트",
-  "eventId":"PAYMENT_FAIL_001",
+  "eventId":"PAYMENT_FAIL_002",
   "channel":"EMAIL"
 }
 

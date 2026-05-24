@@ -30,6 +30,7 @@ public class NotificationProcessor {
                                                 (
                                                         notification.getStatus() == NotificationStatus.FAILED
                                                                 && notification.getRetryCount() < 3
+                                                                && notification.isReadyToRetry()
                                                 )
                                 )
                                         &&
@@ -62,9 +63,22 @@ public class NotificationProcessor {
                 repository.save(notification);
 
                 if (notification.getRetryCount() >= 3) {
+
                     System.out.println("최종 실패 처리 완료");
+
+                    System.out.println("[운영자 알림]");
+                    System.out.println("eventId: "
+                            + notification.getEventId());
+
+                    System.out.println("receiverId: "
+                            + notification.getReceiverId());
+
+                    System.out.println("failureReason: "
+                            + notification.getFailureReason());
+                    
                 } else {
                     System.out.println("재시도 횟수: " + notification.getRetryCount());
+                    System.out.println("다음 재시도 예정 시간: " + notification.getNextRetryAt());
                 }
             }
         }

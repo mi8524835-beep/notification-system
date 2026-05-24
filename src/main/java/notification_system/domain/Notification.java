@@ -39,6 +39,8 @@ public class Notification {
 
     private LocalDateTime scheduledAt;
 
+    private LocalDateTime nextRetryAt;
+
     @Enumerated(EnumType.STRING)
     private NotificationStatus status;
 
@@ -119,14 +121,26 @@ public class Notification {
         return scheduledAt;
     }
 
+    public LocalDateTime getNextRetryAt() {
+        return nextRetryAt;
+    }
+
     public boolean isReadyToSend() {
         return scheduledAt == null
                 || scheduledAt.isBefore(LocalDateTime.now())
                 || scheduledAt.isEqual(LocalDateTime.now());
     }
 
+    public boolean isReadyToRetry() {
+        return nextRetryAt == null
+                || nextRetryAt.isBefore(LocalDateTime.now())
+                || nextRetryAt.isEqual(LocalDateTime.now());
+    }
+
     public void markAsSent() {
         this.status = NotificationStatus.SENT;
+        this.failureReason = null;
+        this.nextRetryAt = null;
     }
 
     public void markAsProcessing() {
@@ -141,11 +155,25 @@ public class Notification {
         this.status = NotificationStatus.FAILED;
         this.failureReason = reason;
         this.retryCount++;
+        this.nextRetryAt = LocalDateTime.now().plusSeconds(getRetryDelaySeconds());
     }
 
     public void retry() {
         this.status = NotificationStatus.REQUESTED;
         this.retryCount = 0;
         this.failureReason = null;
+        this.nextRetryAt = null;
+    }
+
+    private long getRetryDelaySeconds() {
+        if (retryCount == 1) {
+            return 5;
+        }
+
+        if (retryCount == 2) {
+            return 30;
+        }
+
+        return 300;
     }
 }
