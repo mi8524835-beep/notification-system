@@ -1,60 +1,38 @@
-### PostgreSQL 저장 테스트
+### 템플릿 알림 생성 - 결제 성공
 
 POST http://localhost:8080/notifications
 Content-Type: application/json
 
 {
   "receiverId":"민경",
-  "message":"PostgreSQL 저장 테스트",
-  "eventId":"PG_TEST_001",
+  "eventId":"PAYMENT_SUCCESS",
   "channel":"EMAIL"
 }
 
 ###
 
-### PostgreSQL 저장 확인
-
-GET http://localhost:8080/notifications
-
-
-### 알림 생성 (즉시 발송)
+### 템플릿 알림 생성 - 강의 시작 예약
 
 POST http://localhost:8080/notifications
 Content-Type: application/json
 
 {
   "receiverId":"민경",
-  "message":"결제 완료",
-  "eventId":"PAYMENT_001",
-  "channel":"EMAIL"
-}
-
-###
-
-### 예약 발송 테스트
-
-POST http://localhost:8080/notifications
-Content-Type: application/json
-
-{
-  "receiverId":"민경",
-  "message":"예약 발송 테스트",
-  "eventId":"SCHEDULE_001",
+  "eventId":"LECTURE_START",
   "channel":"EMAIL",
-  "scheduledAt":"2026-05-24T00:22:00"
+  "scheduledAt":"2026-05-24T16:00:00"
 }
 
 ###
 
-### 실패 테스트 (재시도용)
+### 템플릿 알림 생성 - 실패 재시도
 
 POST http://localhost:8080/notifications
 Content-Type: application/json
 
 {
   "receiverId":"민경",
-  "message":"실패 테스트",
-  "eventId":"PAYMENT_FAIL_002",
+  "eventId":"PAYMENT_FAIL",
   "channel":"EMAIL"
 }
 

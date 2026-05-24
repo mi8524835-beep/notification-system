@@ -7,18 +7,16 @@ import java.time.LocalDateTime;
 public class NotificationRequest {
 
     private String receiverId;
-    private String message;
+
     private String eventId;
+
     private NotificationChannel channel;
 
     private LocalDateTime scheduledAt;
 
+
     public String getReceiverId() {
         return receiverId;
-    }
-
-    public String getMessage() {
-        return message;
     }
 
     public String getEventId() {

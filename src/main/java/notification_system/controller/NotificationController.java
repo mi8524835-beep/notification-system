@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+import notification_system.domain.NotificationTemplate;
+
 @RestController
 public class NotificationController {
 
@@ -28,10 +30,15 @@ public class NotificationController {
     public String createNotification(
             @RequestBody NotificationRequest request
     ) {
+        String message =
+                NotificationTemplate
+                        .valueOf(request.getEventId())
+                        .getMessage();
+
         Notification notification =
                 new Notification(
                         request.getReceiverId(),
-                        request.getMessage(),
+                        message,
                         request.getEventId(),
                         NotificationStatus.REQUESTED,
                         request.getChannel(),

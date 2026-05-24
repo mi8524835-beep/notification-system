@@ -2,37 +2,43 @@
 
 이 프로젝트는 이벤트 기반 알림 발송 시스템입니다.
 
-결제 완료, 수강 신청, 강의 시작 등 이벤트 발생 시
-사용자에게 알림 요청을 저장하고 비동기 처리 방식으로 발송합니다.
+결제 완료, 강의 시작, 실패 알림 등 이벤트 발생 시
+알림 요청을 저장하고 비동기 처리 방식으로 발송합니다.
 
 실패 시 재시도 정책을 적용하며,
-중복 발송 방지, 읽음 처리, 예약 발송,
-최종 실패 보관 및 수동 재시도 기능을 제공합니다.
+중복 발송 방지, 예약 발송, 읽음 처리,
+최종 실패 기록 및 운영자 모니터링 기능을 제공합니다.
 
 또한 실제 운영 환경을 고려하여
-DB 영속성, 상태 관리, 장애 대응 시나리오까지 함께 설계했습니다.
+DB 영속성, 장애 대응, 재시도 정책,
+운영 시나리오까지 함께 설계했습니다.
 
 ---
 
-## 기술 스택
+# 기술 스택
 
 - Java 17
 - Spring Boot
 - Spring Data JPA
 - PostgreSQL
+- H2 Database
 - Gradle
 
 초기 개발:
 
-- H2 Database
+```text
+H2 Database
+```
 
 운영 고려:
 
-- PostgreSQL 전환
+```text
+PostgreSQL 적용
+```
 
 ---
 
-## 실행 방법
+# 실행 방법
 
 프로젝트 실행:
 
@@ -48,19 +54,22 @@ DB 영속성, 상태 관리, 장애 대응 시나리오까지 함께 설계했�
 
 ---
 
-## API 목록
+# API 목록
 
 ### 알림 생성
 
-POST `/notifications`
+POST
+
+```http
+POST /notifications
+```
 
 예시:
 
 ```json
 {
   "receiverId":"민경",
-  "message":"결제 완료",
-  "eventId":"PAYMENT_001",
+  "eventId":"PAYMENT_SUCCESS",
   "channel":"EMAIL"
 }
 ```
@@ -72,10 +81,9 @@ POST `/notifications`
 ```json
 {
   "receiverId":"민경",
-  "message":"예약 발송",
-  "eventId":"SCHEDULE_001",
+  "eventId":"LECTURE_START",
   "channel":"EMAIL",
-  "scheduledAt":"2026-05-24T12:00:00"
+  "scheduledAt":"2026-05-24T16:00:00"
 }
 ```
 
@@ -103,7 +111,7 @@ GET /notifications/{id}
 GET /users/{receiverId}/notifications
 ```
 
-읽음 필터:
+읽음 여부 필터:
 
 ```http
 GET /users/{receiverId}/notifications?readStatus=true
@@ -129,8 +137,6 @@ PATCH /notifications/{id}/retry
 
 # 상태 관리
 
-상태 흐름:
-
 ```text
 REQUESTED
 ↓
@@ -144,7 +150,7 @@ FAILED
 ↓
 재시도
 ↓
-최종 실패
+최종 FAILED
 ```
 
 ---
@@ -167,7 +173,7 @@ PROCESSING
 SENT / FAILED
 ```
 
-실제 운영 환경:
+운영 확장 가능:
 
 ```text
 Kafka
@@ -175,22 +181,49 @@ RabbitMQ
 Queue
 ```
 
-전환 가능하도록 설계
+---
+
+# 메시지 템플릿
+
+eventId 기준으로 메시지를 자동 생성
+
+예시:
+
+```text
+PAYMENT_SUCCESS
+↓
+결제가 완료되었습니다.
+
+PAYMENT_FAIL
+↓
+결제 실패
+
+LECTURE_START
+↓
+강의 시작
+```
+
+효과:
+
+- 메시지 관리 단순화
+- 중복 문구 제거
+- 유지보수 편의성 증가
 
 ---
 
 # 재시도 정책
 
-현재:
+최대:
 
-최대 3회 재시도
+```text
+3회 재시도
+```
 
 실패 시:
 
 ```text
-FAILED 유지
-failureReason 저장
 retryCount 증가
+failureReason 저장
 ```
 
 ---
@@ -216,30 +249,26 @@ retryCount 증가
 목적:
 
 - 서버 부하 감소
-- 장애 상황에서 과도한 재요청 방지
+- 장애 상황 재요청 방지
 - 장애 복구 시간 확보
 
 ---
 
-## 운영자 모니터링 로그
+# 운영자 모니터링 로그
 
-최종 실패 발생 시
-사용자에게 즉시 재알림하지 않고
-운영자가 확인할 수 있도록 로그 출력
-
-예시:
+최종 실패 시:
 
 ```text
 최종 실패 처리 완료
 
 [운영자 알림]
 
-eventId: PAYMENT_FAIL_002
+eventId: PAYMENT_FAIL
 receiverId: 민경
 failureReason: 이메일 서버 오류
 ```
 
-운영 환경 확장 가능:
+운영 확장 가능:
 
 - Slack 알림
 - 관리자 페이지
@@ -258,21 +287,13 @@ receiverId + eventId
 적용:
 
 - Service 중복 체크
-- DB Unique 제약
+- DB Unique Constraint
 
 동일 이벤트 재발송 차단
-
-예시 로그:
-
-```text
-중복 알림 요청 - 저장하지 않음
-```
 
 ---
 
 # 예약 발송
-
-구현:
 
 ```text
 scheduledAt 이전
@@ -281,20 +302,8 @@ scheduledAt 이전
 
 scheduledAt 이후
 ↓
-발송 가능
+발송
 ```
-
----
-
-# 수동 재시도
-
-최종 실패 알림:
-
-```http
-PATCH /notifications/{id}/retry
-```
-
-관리자가 재처리 가능
 
 ---
 
@@ -320,9 +329,8 @@ PostgreSQL 적용
 
 효과:
 
-- 서버 재시작 후 데이터 유지
-- 알림 이력 영속 저장
-- 유실 없는 재처리 대응 가능
+- 데이터 영속 저장
+- 서버 재시작 후 유지
 - 운영 환경 확장 가능
 
 ---
@@ -333,21 +341,6 @@ PostgreSQL 적용
 
 PostgreSQL 적용으로
 기존 알림 유지 가능
-
----
-
-### 다중 인스턴스 환경
-
-현재:
-
-단일 서버 기준
-
-개선 가능:
-
-- DB Lock
-- 분산 락
-- Queue
-- 상태 선점 방식
 
 ---
 
@@ -365,6 +358,17 @@ FAILED 전환
 
 ---
 
+### 다중 인스턴스 환경
+
+확장 가능:
+
+- Queue
+- 분산락
+- 상태 선점 방식
+- DB Lock
+
+---
+
 # DB 설계
 
 Notification
@@ -373,8 +377,8 @@ Notification
 |------|------|
 | id | PK |
 | receiverId | 수신자 |
-| message | 내용 |
 | eventId | 이벤트 |
+| message | 템플릿 메시지 |
 | status | 상태 |
 | retryCount | 재시도 횟수 |
 | nextRetryAt | 다음 재시도 시간 |
@@ -393,15 +397,16 @@ Notification
 - [x] 전체 조회
 - [x] 단건 조회
 - [x] 사용자별 조회
-- [x] 읽음 처리
 - [x] 읽음 필터
-- [x] 실패 기록
-- [x] 중복 방지
+- [x] 읽음 처리
 - [x] 예약 발송
-- [x] 비동기 처리
-- [x] PostgreSQL 영속 저장
+- [x] 실패 기록
 - [x] 수동 재시도
-- [x] 지수 백오프 재시도
+- [x] 중복 방지
+- [x] PostgreSQL 영속 저장
+- [x] 비동기 처리
+- [x] 메시지 템플릿
+- [x] 지수 백오프
 - [x] 운영자 모니터링 로그
 - [x] 운영 시나리오 고려
 
@@ -409,7 +414,6 @@ Notification
 
 # 개선 가능 사항
 
-- [ ] 메시지 템플릿
 - [ ] Slack 연동
 - [ ] Queue 적용
 - [ ] 관리자 대시보드
@@ -425,10 +429,10 @@ ChatGPT 활용:
 
 - 구조 설계 아이디어
 - 상태 관리 방향
-- README 초안
 - 운영 시나리오 아이디어
-- 재시도 정책
 - PostgreSQL 전환 방향
-- 테스트 코드 아이디어
+- 재시도 정책
+- README 초안
+- 테스트 시나리오
 
 최종 구현, 수정 및 검증은 직접 수행
