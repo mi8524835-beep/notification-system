@@ -1,3 +1,22 @@
+### PostgreSQL 저장 테스트
+
+POST http://localhost:8080/notifications
+Content-Type: application/json
+
+{
+  "receiverId":"민경",
+  "message":"PostgreSQL 저장 테스트",
+  "eventId":"PG_TEST_001",
+  "channel":"EMAIL"
+}
+
+###
+
+### PostgreSQL 저장 확인
+
+GET http://localhost:8080/notifications
+
+
 ### 알림 생성 (즉시 발송)
 
 POST http://localhost:8080/notifications
