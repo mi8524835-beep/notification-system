@@ -11,6 +11,8 @@ import jakarta.persistence.UniqueConstraint;
 
 import java.time.LocalDateTime;
 
+import jakarta.persistence.Version;
+
 @Entity
 @Table(
         uniqueConstraints = {
@@ -24,6 +26,9 @@ public class Notification {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    private Long version;
 
     private String receiverId;
 
@@ -105,6 +110,10 @@ public class Notification {
         return id;
     }
 
+    public Long getVersion() {
+        return version;
+    }
+
     public Integer getRetryCount() {
         return retryCount;
     }
@@ -148,6 +157,10 @@ public class Notification {
     }
 
     public void markAsRead() {
+        if (Boolean.TRUE.equals(this.readStatus)) {
+            return;
+        }
+
         this.readStatus = true;
     }
 

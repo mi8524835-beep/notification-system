@@ -45,85 +45,6 @@ DB 영속성, 장애 대응, 재시도 정책,
 
 ---
 
-## API 목록 및 예시
-
-### 알림 생성
-
-```http
-POST /notifications
-```
-
-예시:
-
-```json
-{
-  "receiverId":"민경",
-  "eventId":"PAYMENT_SUCCESS",
-  "channel":"EMAIL"
-}
-```
-
----
-
-### 예약 발송
-
-```json
-{
-  "receiverId":"민경",
-  "eventId":"LECTURE_START",
-  "channel":"EMAIL",
-  "scheduledAt":"2026-05-24T16:00:00"
-}
-```
-
----
-
-### 전체 조회
-
-```http
-GET /notifications
-```
-
----
-
-### 단건 조회
-
-```http
-GET /notifications/{id}
-```
-
----
-
-### 사용자별 조회
-
-```http
-GET /users/{receiverId}/notifications
-```
-
-읽음 여부 필터:
-
-```http
-GET /users/{receiverId}/notifications?readStatus=true
-```
-
----
-
-### 읽음 처리
-
-```http
-PATCH /notifications/{id}/read
-```
-
----
-
-### 수동 재시도
-
-```http
-PATCH /notifications/{id}/retry
-```
-
----
-
 ## 요구사항 해석 및 가정
 
 알림 발송 요청 API는 실제 즉시 발송이 아니라
@@ -136,72 +57,58 @@ PATCH /notifications/{id}/retry
 비즈니스 트랜잭션에 영향을 주지 않도록
 알림 요청 저장과 발송 처리를 분리했습니다.
 
----
-
-## 상태 관리
-
-알림 상태:
-
-```text
-REQUESTED
-PROCESSING
-SENT
-FAILED
-```
-
-상태 흐름:
-
-```text
-REQUESTED
-↓
-PROCESSING
-↓
-SENT
-
-또는
-
-FAILED
-↓
-재시도
-↓
-최종 FAILED
-```
+eventId는 중복 발송 방지 기준이자
+메시지 템플릿을 선택하는 알림 타입 역할을 함께 수행합니다.
 
 ---
 
-## 비동기 처리 구조
+## 설계 결정과 이유
 
-현재 구현:
+### 요청 저장과 발송 처리 분리
 
-```text
-알림 요청
-↓
-DB 저장
-↓
-REQUESTED
-↓
-@Scheduled 처리
-↓
-PROCESSING
-↓
-SENT / FAILED
-```
+API 요청 시 바로 발송하지 않고
+REQUESTED 상태로 DB에 저장합니다.
 
-실제 운영 환경에서는 다음 구조로 확장 가능합니다.
+이후 Scheduler 기반 Processor가 별도로 알림을 처리합니다.
 
-```text
-Kafka
-RabbitMQ
-Queue
-```
-
-메시지 브로커는 사용하지 않았지만,
-요청 저장과 실제 처리 로직을 분리하여
-운영 환경에서 Queue 기반 처리로 전환 가능하도록 설계했습니다.
+이 방식으로 알림 발송 실패가
+비즈니스 요청 흐름에 영향을 주지 않도록 했습니다.
 
 ---
 
-## 메시지 템플릿
+### PostgreSQL 적용
+
+초기 개발 단계에서는 H2 Database를 사용했습니다.
+
+하지만 서버 재시작 후 알림 데이터가 유실되지 않아야 하므로
+PostgreSQL로 전환했습니다.
+
+효과:
+
+- 데이터 영속 저장
+- 서버 재시작 후 알림 유지
+- 운영 환경 확장 가능
+
+---
+
+### 중복 발송 방지
+
+중복 기준:
+
+```text
+receiverId + eventId
+```
+
+적용:
+
+- Service 중복 체크
+- DB Unique Constraint
+
+동일 이벤트에 대한 중복 알림 저장을 방지합니다.
+
+---
+
+### 메시지 템플릿
 
 eventId 기준으로 메시지를 자동 생성합니다.
 
@@ -229,7 +136,7 @@ LECTURE_START
 
 ---
 
-## 재시도 정책
+### 재시도 정책
 
 최대 3회 재시도합니다.
 
@@ -269,6 +176,295 @@ nextRetryAt 계산
 
 ---
 
+### 읽음 처리 동시성 대응
+
+여러 기기에서 동시에 읽음 처리 요청이 들어오는 상황을 고려하여
+Notification 엔티티에 `@Version` 기반 낙관적 락을 적용했습니다.
+
+또한 이미 읽음 상태인 알림에 다시 읽음 처리 요청이 들어와도
+상태를 중복 변경하지 않도록 처리했습니다.
+
+---
+
+## API 명세 및 샘플 요청/응답
+
+### 1. 알림 생성
+
+```http
+POST /notifications
+```
+
+Request:
+
+```json
+{
+  "receiverId":"민경",
+  "eventId":"PAYMENT_SUCCESS",
+  "channel":"EMAIL"
+}
+```
+
+Response:
+
+```text
+알림 요청 접수 완료
+```
+
+설명:
+
+- 요청 즉시 발송하지 않습니다.
+- DB에 REQUESTED 상태로 저장됩니다.
+- Processor가 이후 비동기로 처리합니다.
+
+---
+
+### 2. 예약 알림 생성
+
+```http
+POST /notifications
+```
+
+Request:
+
+```json
+{
+  "receiverId":"민경",
+  "eventId":"LECTURE_START",
+  "channel":"EMAIL",
+  "scheduledAt":"2026-05-24T16:00:00"
+}
+```
+
+Response:
+
+```text
+알림 요청 접수 완료
+```
+
+설명:
+
+- scheduledAt 이전에는 발송하지 않습니다.
+- scheduledAt 이후 Processor가 발송 처리합니다.
+
+---
+
+### 3. 전체 알림 조회
+
+```http
+GET /notifications
+```
+
+Response 예시:
+
+```json
+[
+  {
+    "id":1,
+    "receiverId":"민경",
+    "eventId":"PAYMENT_SUCCESS",
+    "message":"결제가 완료되었습니다.",
+    "channel":"EMAIL",
+    "status":"SENT",
+    "retryCount":0,
+    "readStatus":false,
+    "scheduledAt":null,
+    "failureReason":null,
+    "nextRetryAt":null,
+    "version":0,
+    "readyToSend":true,
+    "readyToRetry":true
+  }
+]
+```
+
+---
+
+### 4. 단건 알림 조회
+
+```http
+GET /notifications/{id}
+```
+
+Response 예시:
+
+```json
+{
+  "id":1,
+  "receiverId":"민경",
+  "eventId":"PAYMENT_SUCCESS",
+  "message":"결제가 완료되었습니다.",
+  "channel":"EMAIL",
+  "status":"SENT",
+  "retryCount":0,
+  "readStatus":false,
+  "scheduledAt":null,
+  "failureReason":null,
+  "nextRetryAt":null,
+  "version":0
+}
+```
+
+---
+
+### 5. 사용자별 알림 조회
+
+```http
+GET /users/{receiverId}/notifications
+```
+
+Response 예시:
+
+```json
+[
+  {
+    "id":1,
+    "receiverId":"민경",
+    "eventId":"PAYMENT_SUCCESS",
+    "message":"결제가 완료되었습니다.",
+    "status":"SENT",
+    "readStatus":false
+  }
+]
+```
+
+---
+
+### 6. 읽음 여부 필터 조회
+
+```http
+GET /users/{receiverId}/notifications?readStatus=true
+```
+
+Response 예시:
+
+```json
+[
+  {
+    "id":1,
+    "receiverId":"민경",
+    "eventId":"PAYMENT_SUCCESS",
+    "message":"결제가 완료되었습니다.",
+    "status":"SENT",
+    "readStatus":true
+  }
+]
+```
+
+---
+
+### 7. 읽음 처리
+
+```http
+PATCH /notifications/{id}/read
+```
+
+Response:
+
+```text
+읽음 처리 완료
+```
+
+설명:
+
+- readStatus를 true로 변경합니다.
+- `@Version`을 통해 동시 수정 충돌을 감지할 수 있도록 설계했습니다.
+
+---
+
+### 8. 수동 재시도
+
+```http
+PATCH /notifications/{id}/retry
+```
+
+Response:
+
+```text
+수동 재시도 요청 완료
+```
+
+설명:
+
+- 최종 실패한 알림을 다시 REQUESTED 상태로 변경합니다.
+- retryCount와 failureReason을 초기화합니다.
+
+---
+
+## 상태 관리
+
+알림 상태:
+
+```text
+REQUESTED
+PROCESSING
+SENT
+FAILED
+```
+
+상태 흐름:
+
+```text
+REQUESTED
+↓
+PROCESSING
+↓
+SENT
+
+또는
+
+FAILED
+↓
+재시도
+↓
+최종 FAILED
+```
+
+---
+
+## 비동기 처리 구조 및 재시도 정책
+
+현재 구현:
+
+```text
+알림 요청
+↓
+DB 저장
+↓
+REQUESTED
+↓
+@Scheduled Processor
+↓
+PROCESSING
+↓
+SENT / FAILED
+```
+
+발송 실패 시:
+
+```text
+FAILED
+↓
+retryCount 증가
+↓
+nextRetryAt 설정
+↓
+재시도 가능 시간 이후 재처리
+```
+
+실제 운영 환경에서는 다음 구조로 확장 가능합니다.
+
+```text
+Kafka
+RabbitMQ
+Queue
+```
+
+메시지 브로커는 사용하지 않았지만,
+요청 저장과 실제 처리 로직을 분리하여
+운영 환경에서 Queue 기반 처리로 전환 가능하도록 설계했습니다.
+
+---
+
 ## 운영자 모니터링 로그
 
 최종 실패 시 사용자에게 다시 알림을 보내지 않고,
@@ -294,122 +490,35 @@ failureReason: 이메일 서버 오류
 
 ---
 
-## 중복 발송 방지
+## DB 스키마 / 데이터 모델 설명
 
-중복 기준:
+### Notification
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | Long | PK |
+| receiverId | String | 수신자 ID |
+| eventId | String | 이벤트 ID 및 알림 타입 |
+| message | String | 템플릿 기반 메시지 |
+| status | Enum | REQUESTED / PROCESSING / SENT / FAILED |
+| retryCount | Integer | 재시도 횟수 |
+| nextRetryAt | LocalDateTime | 다음 재시도 가능 시간 |
+| readStatus | Boolean | 읽음 여부 |
+| scheduledAt | LocalDateTime | 예약 발송 시간 |
+| failureReason | String | 실패 사유 |
+| channel | Enum | EMAIL / IN_APP |
+| version | Long | 낙관적 락 버전 |
+
+Unique Constraint:
 
 ```text
 receiverId + eventId
 ```
 
-적용:
+목적:
 
-- Service 중복 체크
-- DB Unique Constraint
-
-동일 이벤트에 대한 중복 알림 저장을 방지합니다.
-
----
-
-## 예약 발송
-
-```text
-scheduledAt 이전
-↓
-대기
-
-scheduledAt 이후
-↓
-발송
-```
-
-특정 시각 이후에만 발송되도록 처리했습니다.
-
----
-
-## PostgreSQL 적용
-
-초기 개발 단계에서는 H2 Database를 사용했습니다.
-
-문제:
-
-```text
-서버 재시작 시 데이터 유실 가능
-```
-
-개선:
-
-```text
-PostgreSQL 적용
-```
-
-효과:
-
-- 데이터 영속 저장
-- 서버 재시작 후 알림 유지
-- 운영 환경 확장 가능
-
----
-
-## 운영 시나리오 고려
-
-### 서버 재시작
-
-PostgreSQL 적용으로 기존 알림 데이터가 유지됩니다.
-
----
-
-### 장기 PROCESSING 상태
-
-현재는 PROCESSING 상태가 장시간 유지되는 경우를
-자동 복구하지 않았습니다.
-
-개선 방향:
-
-```text
-PROCESSING 지속
-↓
-일정 시간 초과 감지
-↓
-FAILED 전환
-↓
-재시도
-```
-
----
-
-### 다중 인스턴스 환경
-
-현재 구현은 단일 서버 기준입니다.
-
-다중 인스턴스 환경에서는 동일 알림을
-여러 서버가 동시에 처리할 수 있으므로
-다음 방식으로 확장할 수 있습니다.
-
-- Queue
-- 분산락
-- 상태 선점 방식
-- DB Lock
-
----
-
-## 데이터 모델 설명
-
-Notification
-
-| 컬럼 | 설명 |
-|------|------|
-| id | PK |
-| receiverId | 수신자 |
-| eventId | 이벤트 |
-| message | 템플릿 메시지 |
-| status | 상태 |
-| retryCount | 재시도 횟수 |
-| nextRetryAt | 다음 재시도 시간 |
-| readStatus | 읽음 여부 |
-| scheduledAt | 예약 시간 |
-| failureReason | 실패 이유 |
-| channel | 발송 채널 |
+- 동일 사용자에게 동일 이벤트 알림 중복 저장 방지
+- 중복 발송 방지
 
 ---
 
@@ -456,6 +565,7 @@ BUILD SUCCESSFUL
 - [x] 메시지 템플릿
 - [x] 지수 백오프
 - [x] 운영자 모니터링 로그
+- [x] 읽음 처리 동시성 대응
 - [x] 테스트 코드 작성
 - [x] 운영 시나리오 고려
 
@@ -478,7 +588,7 @@ BUILD SUCCESSFUL
 - 관리자 대시보드
 - 장기 PROCESSING 자동 복구
 - DB Lock / 분산락 기반 다중 인스턴스 대응
-- 읽음 처리 동시성 보완
+- 읽음 처리 동시성 테스트 보강
 
 ---
 
