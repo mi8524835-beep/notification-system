@@ -26,7 +26,13 @@ public class NotificationProcessor {
                         .filter(notification ->
                                 (
                                         notification.getStatus() == NotificationStatus.REQUESTED
+
                                                 ||
+
+                                                notification.isProcessingTooLong()
+
+                                                ||
+
                                                 (
                                                         notification.getStatus() == NotificationStatus.FAILED
                                                                 && notification.getRetryCount() < 3

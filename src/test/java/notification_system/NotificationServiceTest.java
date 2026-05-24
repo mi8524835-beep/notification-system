@@ -10,7 +10,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.EntityTransaction;
+import org.junit.jupiter.api.Assertions;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+
+import java.time.LocalDateTime;import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 class NotificationServiceTest {
@@ -21,6 +27,8 @@ class NotificationServiceTest {
     @Autowired
     NotificationRepository repository;
 
+    @Autowired
+    EntityManagerFactory entityManagerFactory;
 
     @BeforeEach
     void clear() {
@@ -178,4 +186,93 @@ class NotificationServiceTest {
                 notification.getNextRetryAt()
         ).isNotNull();
     }
+
+    @Test
+    void 이미읽음상태면다시읽음처리해도상태는유지된다() {
+
+        Notification notification =
+                new Notification(
+                        "민경",
+                        "읽음",
+                        "EVENT_READ_ONCE",
+                        NotificationStatus.REQUESTED,
+                        NotificationChannel.EMAIL
+                );
+
+        notification.markAsRead();
+        notification.markAsRead();
+
+        assertThat(
+                notification.getReadStatus()
+        ).isTrue();
+    }
+
+    @Test
+    void 동시에같은알림을수정하면낙관적락이동작한다() {
+
+        Notification notification =
+                new Notification(
+                        "민경",
+                        "읽음",
+                        "EVENT_CONCURRENT_READ",
+                        NotificationStatus.REQUESTED,
+                        NotificationChannel.EMAIL
+                );
+
+        repository.save(notification);
+
+        Long id = notification.getId();
+
+        EntityManager em1 = entityManagerFactory.createEntityManager();
+        EntityManager em2 = entityManagerFactory.createEntityManager();
+
+        EntityTransaction tx1 = em1.getTransaction();
+        EntityTransaction tx2 = em2.getTransaction();
+
+        tx1.begin();
+        tx2.begin();
+
+        Notification first =
+                em1.find(Notification.class, id);
+
+        Notification second =
+                em2.find(Notification.class, id);
+
+        first.markAsRead();
+        second.markAsRead();
+
+        tx1.commit();
+
+        Assertions.assertThrows(
+                Exception.class,
+                tx2::commit
+        );
+
+        em1.close();
+        em2.close();
+    }
+
+    @Test
+    void 처리중상태가30분이상지속되면복구대상이된다() {
+
+        Notification notification =
+                new Notification(
+                        "민경",
+                        "처리중",
+                        "EVENT_PROCESSING_TIMEOUT",
+                        NotificationStatus.REQUESTED,
+                        NotificationChannel.EMAIL
+                );
+
+        notification.markAsProcessing();
+
+        notification.forceProcessingStartedAt(
+                LocalDateTime.now().minusMinutes(31)
+        );
+
+        assertThat(
+                notification.isProcessingTooLong()
+        ).isTrue();
+    }
+
 }

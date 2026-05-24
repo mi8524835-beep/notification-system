@@ -44,6 +44,8 @@ public class Notification {
 
     private LocalDateTime scheduledAt;
 
+    private LocalDateTime processingStartedAt;
+
     private LocalDateTime nextRetryAt;
 
     @Enumerated(EnumType.STRING)
@@ -153,7 +155,16 @@ public class Notification {
     }
 
     public void markAsProcessing() {
-        this.status = NotificationStatus.PROCESSING;
+
+        this.status =
+                NotificationStatus.PROCESSING;
+
+        this.processingStartedAt =
+                LocalDateTime.now();
+    }
+
+    public void forceProcessingStartedAt(LocalDateTime processingStartedAt) {
+        this.processingStartedAt = processingStartedAt;
     }
 
     public void markAsRead() {
@@ -176,6 +187,23 @@ public class Notification {
         this.retryCount = 0;
         this.failureReason = null;
         this.nextRetryAt = null;
+    }
+
+    public boolean isProcessingTooLong() {
+
+        return status ==
+                NotificationStatus.PROCESSING
+
+                &&
+
+                processingStartedAt != null
+
+                &&
+
+                processingStartedAt.isBefore(
+                        LocalDateTime.now()
+                                .minusMinutes(30)
+                );
     }
 
     private long getRetryDelaySeconds() {

@@ -2,6 +2,7 @@ package notification_system.service;
 
 import notification_system.domain.Notification;
 import notification_system.repository.NotificationRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -24,9 +25,15 @@ public class NotificationService {
             return;
         }
 
-        repository.save(notification);   // ⭐ 저장
+        try {
+            repository.save(notification);
 
-        System.out.println("알림 요청 접수");
-        System.out.println("REQUESTED 저장 완료");
+            System.out.println("알림 요청 접수");
+            System.out.println("REQUESTED 저장 완료");
+
+        } catch (DataIntegrityViolationException e) {
+
+            System.out.println("동시 중복 알림 요청 - 저장하지 않음");
+        }
     }
 }
