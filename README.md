@@ -16,7 +16,7 @@ DB 영속성, 장애 대응, 재시도 정책,
 
 ---
 
-## 기술 스택
+# 기술 스택
 
 - Java 17
 - Spring Boot
@@ -24,12 +24,12 @@ DB 영속성, 장애 대응, 재시도 정책,
 - PostgreSQL
 - H2 Database
 - Gradle
-- JUnit 5
+- JUnit5
 - AssertJ
 
 ---
 
-## 실행 방법
+# 실행 방법
 
 프로젝트 실행:
 
@@ -45,53 +45,79 @@ DB 영속성, 장애 대응, 재시도 정책,
 
 ---
 
-## 요구사항 해석 및 가정
+# 요구사항 해석 및 가정
 
 알림 발송 요청 API는 실제 즉시 발송이 아니라
 요청을 DB에 저장한 뒤 비동기 처리 대상 상태로 두는 방식으로 해석했습니다.
 
-실제 이메일 발송은 과제 조건에 따라 수행하지 않고,
-로그 출력으로 Mock 처리했습니다.
+실제 이메일 발송은 수행하지 않고
+로그 출력(Mock) 방식으로 처리했습니다.
 
-알림 발송 실패가 결제나 수강 신청 같은
-비즈니스 트랜잭션에 영향을 주지 않도록
-알림 요청 저장과 발송 처리를 분리했습니다.
+알림 발송 실패가
+결제나 수강 신청 같은 비즈니스 로직에 영향을 주지 않도록
+요청 저장과 발송 처리를 분리했습니다.
 
-eventId는 중복 발송 방지 기준이자
-메시지 템플릿을 선택하는 알림 타입 역할을 함께 수행합니다.
+eventId는:
 
----
+- 중복 발송 방지 기준
+- 메시지 템플릿 선택 기준
 
-## 설계 결정과 이유
-
-### 요청 저장과 발송 처리 분리
-
-API 요청 시 바로 발송하지 않고
-REQUESTED 상태로 DB에 저장합니다.
-
-이후 Scheduler 기반 Processor가 별도로 알림을 처리합니다.
-
-이 방식으로 알림 발송 실패가
-비즈니스 요청 흐름에 영향을 주지 않도록 했습니다.
+역할을 함께 수행합니다.
 
 ---
 
-### PostgreSQL 적용
+# 설계 결정과 이유
 
-초기 개발 단계에서는 H2 Database를 사용했습니다.
+## 요청 저장과 발송 처리 분리
 
-하지만 서버 재시작 후 알림 데이터가 유실되지 않아야 하므로
-PostgreSQL로 전환했습니다.
+현재 구조:
+
+```text
+API 요청
+↓
+REQUESTED 저장
+↓
+Processor 처리
+↓
+SENT / FAILED
+```
+
+목적:
+
+- 요청 지연 최소화
+- 발송 실패가 비즈니스 트랜잭션에 영향 주지 않도록 분리
+
+---
+
+## PostgreSQL 적용
+
+초기:
+
+```text
+H2 Database
+```
+
+문제:
+
+```text
+서버 재시작 시 데이터 유실 가능
+```
+
+개선:
+
+```text
+PostgreSQL 적용
+```
 
 효과:
 
-- 데이터 영속 저장
-- 서버 재시작 후 알림 유지
+- 영속 저장
+- 재시작 후 데이터 유지
 - 운영 환경 확장 가능
 
 ---
 
-### 중복 발송 방지
+## 중복 발송 방지
 
 중복 기준:
 
@@ -104,13 +130,11 @@ receiverId + eventId
 - Service 중복 체크
 - DB Unique Constraint
 
-동일 이벤트에 대한 중복 알림 저장을 방지합니다.
-
 ---
 
-### 메시지 템플릿
+## 메시지 템플릿 적용
 
-eventId 기준으로 메시지를 자동 생성합니다.
+eventId 기반:
 
 예시:
 
@@ -119,76 +143,66 @@ PAYMENT_SUCCESS
 ↓
 결제가 완료되었습니다.
 
-PAYMENT_FAIL
-↓
-결제 실패
-
 LECTURE_START
 ↓
-강의 시작
+강의가 시작됩니다.
 ```
 
 효과:
 
-- 메시지 관리 단순화
-- 중복 문구 제거
-- 유지보수 편의성 증가
+- 유지보수 편의성
+- 중복 제거
 
 ---
 
-### 재시도 정책
+## 재시도 정책 + 지수 백오프
 
-최대 3회 재시도합니다.
-
-실패 시:
+최대:
 
 ```text
-retryCount 증가
-failureReason 저장
-nextRetryAt 계산
+3회 재시도
 ```
 
----
-
-### 지수 백오프 적용
-
-재시도 간격을 점진적으로 증가하도록 구현했습니다.
+간격:
 
 ```text
-1차 실패
-↓
-5초 후 재시도
+1차 → 5초
 
-2차 실패
-↓
-30초 후 재시도
+2차 → 30초
 
-3차 실패
-↓
-5분 후 재시도
+3차 → 5분
 ```
 
 목적:
 
 - 서버 부하 감소
-- 장애 상황 재요청 방지
 - 장애 복구 시간 확보
 
 ---
 
-### 읽음 처리 동시성 대응
+## 읽음 처리 동시성 대응
 
-여러 기기에서 동시에 읽음 처리 요청이 들어오는 상황을 고려하여
-Notification 엔티티에 `@Version` 기반 낙관적 락을 적용했습니다.
+Notification 엔티티에:
 
-또한 이미 읽음 상태인 알림에 다시 읽음 처리 요청이 들어와도
-상태를 중복 변경하지 않도록 처리했습니다.
+```java
+@Version
+private Long version;
+```
+
+적용.
+
+목적:
+
+- 여러 기기에서 동시에 읽음 처리 시 충돌 감지
+- 낙관적 락 적용
 
 ---
 
-## API 명세 및 샘플 요청/응답
+# API 명세 및 샘플 요청/응답
 
-### 1. 알림 생성
+## 알림 생성
+
+POST
 
 ```http
 POST /notifications
@@ -210,19 +224,9 @@ Response:
 알림 요청 접수 완료
 ```
 
-설명:
-
-- 요청 즉시 발송하지 않습니다.
-- DB에 REQUESTED 상태로 저장됩니다.
-- Processor가 이후 비동기로 처리합니다.
-
 ---
 
-### 2. 예약 알림 생성
-
-```http
-POST /notifications
-```
+## 예약 알림
 
 Request:
 
@@ -235,164 +239,59 @@ Request:
 }
 ```
 
-Response:
-
-```text
-알림 요청 접수 완료
-```
-
-설명:
-
-- scheduledAt 이전에는 발송하지 않습니다.
-- scheduledAt 이후 Processor가 발송 처리합니다.
-
 ---
 
-### 3. 전체 알림 조회
+## 전체 조회
 
 ```http
 GET /notifications
 ```
 
-Response 예시:
-
-```json
-[
-  {
-    "id":1,
-    "receiverId":"민경",
-    "eventId":"PAYMENT_SUCCESS",
-    "message":"결제가 완료되었습니다.",
-    "channel":"EMAIL",
-    "status":"SENT",
-    "retryCount":0,
-    "readStatus":false,
-    "scheduledAt":null,
-    "failureReason":null,
-    "nextRetryAt":null,
-    "version":0,
-    "readyToSend":true,
-    "readyToRetry":true
-  }
-]
-```
-
 ---
 
-### 4. 단건 알림 조회
+## 단건 조회
 
 ```http
 GET /notifications/{id}
 ```
 
-Response 예시:
-
-```json
-{
-  "id":1,
-  "receiverId":"민경",
-  "eventId":"PAYMENT_SUCCESS",
-  "message":"결제가 완료되었습니다.",
-  "channel":"EMAIL",
-  "status":"SENT",
-  "retryCount":0,
-  "readStatus":false,
-  "scheduledAt":null,
-  "failureReason":null,
-  "nextRetryAt":null,
-  "version":0
-}
-```
-
 ---
 
-### 5. 사용자별 알림 조회
+## 사용자별 조회
 
 ```http
 GET /users/{receiverId}/notifications
 ```
 
-Response 예시:
-
-```json
-[
-  {
-    "id":1,
-    "receiverId":"민경",
-    "eventId":"PAYMENT_SUCCESS",
-    "message":"결제가 완료되었습니다.",
-    "status":"SENT",
-    "readStatus":false
-  }
-]
-```
-
 ---
 
-### 6. 읽음 여부 필터 조회
+## 읽음 필터
 
 ```http
 GET /users/{receiverId}/notifications?readStatus=true
 ```
 
-Response 예시:
-
-```json
-[
-  {
-    "id":1,
-    "receiverId":"민경",
-    "eventId":"PAYMENT_SUCCESS",
-    "message":"결제가 완료되었습니다.",
-    "status":"SENT",
-    "readStatus":true
-  }
-]
-```
-
 ---
 
-### 7. 읽음 처리
+## 읽음 처리
 
 ```http
 PATCH /notifications/{id}/read
 ```
 
-Response:
-
-```text
-읽음 처리 완료
-```
-
-설명:
-
-- readStatus를 true로 변경합니다.
-- `@Version`을 통해 동시 수정 충돌을 감지할 수 있도록 설계했습니다.
-
 ---
 
-### 8. 수동 재시도
+## 수동 재시도
 
 ```http
 PATCH /notifications/{id}/retry
 ```
 
-Response:
-
-```text
-수동 재시도 요청 완료
-```
-
-설명:
-
-- 최종 실패한 알림을 다시 REQUESTED 상태로 변경합니다.
-- retryCount와 failureReason을 초기화합니다.
-
 ---
 
-## 상태 관리
+# 상태 관리
 
-알림 상태:
+상태:
 
 ```text
 REQUESTED
@@ -401,7 +300,7 @@ SENT
 FAILED
 ```
 
-상태 흐름:
+흐름:
 
 ```text
 REQUESTED
@@ -414,19 +313,19 @@ SENT
 
 FAILED
 ↓
-재시도
+retry
 ↓
 최종 FAILED
 ```
 
 ---
 
-## 비동기 처리 구조 및 재시도 정책
+# 비동기 처리 구조
 
-현재 구현:
+현재:
 
 ```text
-알림 요청
+API
 ↓
 DB 저장
 ↓
@@ -439,19 +338,7 @@ PROCESSING
 SENT / FAILED
 ```
 
-발송 실패 시:
-
-```text
-FAILED
-↓
-retryCount 증가
-↓
-nextRetryAt 설정
-↓
-재시도 가능 시간 이후 재처리
-```
-
-실제 운영 환경에서는 다음 구조로 확장 가능합니다.
+운영 확장:
 
 ```text
 Kafka
@@ -459,16 +346,11 @@ RabbitMQ
 Queue
 ```
 
-메시지 브로커는 사용하지 않았지만,
-요청 저장과 실제 처리 로직을 분리하여
-운영 환경에서 Queue 기반 처리로 전환 가능하도록 설계했습니다.
-
 ---
 
-## 운영자 모니터링 로그
+# 운영자 모니터링 로그
 
-최종 실패 시 사용자에게 다시 알림을 보내지 않고,
-운영자가 확인할 수 있도록 로그를 출력합니다.
+최종 실패:
 
 예시:
 
@@ -477,52 +359,87 @@ Queue
 
 [운영자 알림]
 
-eventId: PAYMENT_FAIL
-receiverId: 민경
-failureReason: 이메일 서버 오류
+eventId:
+receiverId:
+failureReason:
 ```
 
-운영 환경에서는 다음 방식으로 확장 가능합니다.
+운영 확장:
 
-- Slack 알림
+- Slack
 - 관리자 페이지
 - Email 모니터링
 
 ---
 
-## DB 스키마 / 데이터 모델 설명
+# DB 스키마 / 데이터 모델 설명
 
-### Notification
+## Notification
 
-| 컬럼 | 타입 | 설명 |
-|------|------|------|
-| id | Long | PK |
-| receiverId | String | 수신자 ID |
-| eventId | String | 이벤트 ID 및 알림 타입 |
-| message | String | 템플릿 기반 메시지 |
-| status | Enum | REQUESTED / PROCESSING / SENT / FAILED |
-| retryCount | Integer | 재시도 횟수 |
-| nextRetryAt | LocalDateTime | 다음 재시도 가능 시간 |
-| readStatus | Boolean | 읽음 여부 |
-| scheduledAt | LocalDateTime | 예약 발송 시간 |
-| failureReason | String | 실패 사유 |
-| channel | Enum | EMAIL / IN_APP |
-| version | Long | 낙관적 락 버전 |
+| 컬럼 | 설명 |
+|------|------|
+| id | PK |
+| receiverId | 수신자 |
+| eventId | 이벤트 |
+| message | 템플릿 메시지 |
+| status | 상태 |
+| retryCount | 재시도 |
+| nextRetryAt | 다음 재시도 |
+| readStatus | 읽음 여부 |
+| scheduledAt | 예약 시간 |
+| failureReason | 실패 이유 |
+| channel | 발송 채널 |
+| version | 낙관적 락 |
 
-Unique Constraint:
+Unique:
 
 ```text
 receiverId + eventId
 ```
 
-목적:
+---
 
-- 동일 사용자에게 동일 이벤트 알림 중복 저장 방지
-- 중복 발송 방지
+# ERD 설명
+
+```text
+Notification
+─────────────────────
+id (PK)
+
+receiverId
+
+eventId
+
+message
+
+status
+
+retryCount
+
+nextRetryAt
+
+readStatus
+
+scheduledAt
+
+failureReason
+
+channel
+
+version
+─────────────────────
+```
+
+설계 목적:
+
+- 상태 관리
+- 재시도 관리
+- 예약 발송
+- 동시성 대응
 
 ---
 
-## 테스트 실행 방법
+# 테스트 실행 방법
 
 ```bash
 ./gradlew test
@@ -530,15 +447,15 @@ receiverId + eventId
 
 작성 테스트:
 
-- 알림 저장 테스트
-- 중복 방지 테스트
-- 읽음 처리 테스트
-- 실패 시 재시도 횟수 증가 테스트
-- 상태 변경 테스트
-- 템플릿 메시지 테스트
-- 실패 시 다음 재시도 시간 설정 테스트
+- 알림 저장
+- 중복 방지
+- 읽음 처리
+- 실패 처리
+- 상태 변경
+- 템플릿 테스트
+- nextRetryAt 테스트
 
-테스트 실행 결과:
+결과:
 
 ```text
 BUILD SUCCESSFUL
@@ -546,63 +463,110 @@ BUILD SUCCESSFUL
 
 ---
 
-## 구현 완료 기능
+# 구현 완료 기능
 
 완료:
 
 - [x] 알림 생성
-- [x] 전체 조회
-- [x] 단건 조회
-- [x] 사용자별 조회
-- [x] 읽음 필터
+- [x] 조회
 - [x] 읽음 처리
 - [x] 예약 발송
 - [x] 실패 기록
 - [x] 수동 재시도
-- [x] 중복 방지
-- [x] PostgreSQL 영속 저장
+- [x] PostgreSQL
 - [x] 비동기 처리
-- [x] 메시지 템플릿
+- [x] 템플릿
 - [x] 지수 백오프
-- [x] 운영자 모니터링 로그
-- [x] 읽음 처리 동시성 대응
-- [x] 테스트 코드 작성
-- [x] 운영 시나리오 고려
+- [x] 운영자 로그
+- [x] 동시성 대응
+- [x] 테스트 코드
 
 ---
 
-## 미구현 / 제약사항
+# 미구현 / 제약사항
 
-- 실제 이메일 발송은 구현하지 않고 로그 출력으로 대체했습니다.
-- 실제 메시지 브로커(Kafka/RabbitMQ)는 사용하지 않았습니다.
-- 다중 인스턴스 환경의 분산락은 설계 방향만 기술했습니다.
-- 장기 PROCESSING 상태 자동 복구는 개선 방향으로 남겼습니다.
-- 관리자 대시보드는 구현하지 않고 운영자 로그로 대체했습니다.
+- 실제 이메일 발송 없음
+- Kafka/RabbitMQ 미적용
+- 분산락 미구현
+- PROCESSING 자동 복구 미구현
+- 관리자 대시보드 없음
 
 ---
 
-## 개선 가능 사항
+# 개선 가능 사항
 
-- Queue 기반 비동기 처리
+- Queue 적용
 - Slack 연동
-- 관리자 대시보드
-- 장기 PROCESSING 자동 복구
-- DB Lock / 분산락 기반 다중 인스턴스 대응
-- 읽음 처리 동시성 테스트 보강
+- 관리자 페이지
+- PROCESSING 복구
+- 분산락
+- 동시성 테스트 보강
 
 ---
 
-## AI 활용 범위
+# 요구사항 개선 의견
+
+현재 구현은 Scheduler 기반입니다.
+
+운영 환경 개선 방향:
+
+### 메시지 브로커
+
+현재:
+
+```text
+DB
+↓
+Scheduler
+```
+
+확장:
+
+```text
+Kafka
+RabbitMQ
+Consumer
+```
+
+---
+
+### 장기 PROCESSING 복구
+
+```text
+PROCESSING 오래 지속
+↓
+FAILED
+↓
+retry
+```
+
+---
+
+### 동시성 테스트 보강
+
+현재:
+
+```text
+@Version 적용
+```
+
+향후:
+
+```text
+실제 충돌 테스트 추가
+```
+
+---
+
+# AI 활용 범위
 
 ChatGPT 활용:
 
 - 구조 설계 아이디어
-- 상태 관리 방향
-- 운영 시나리오 아이디어
-- PostgreSQL 전환 방향
+- README 정리
+- 테스트 아이디어
+- 운영 시나리오
 - 재시도 정책
-- 메시지 템플릿 설계 아이디어
-- 테스트 코드 아이디어
-- README 초안 작성 및 정리
+- PostgreSQL 전환 방향
 
-최종 구현, 수정, 테스트 실행 및 검증은 직접 수행했습니다.
+최종 구현 및 검증은 직접 수행했습니다.
