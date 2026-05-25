@@ -2,7 +2,7 @@
 
 프로덕트 엔지니어 채용 과제 **BE-C. 알림 발송 시스템** 구현 프로젝트입니다.
 
-이 프로젝트는 수강 신청 완료, 결제 확정, 강의 시작 D-1, 취소 처리 등 다양한 이벤트가 발생했을 때 사용자에게 이메일 또는 인앱 알림을 발송하는 상황을 가정합니다.
+수강 신청 완료, 결제 확정, 강의 시작 D-1, 취소 처리 등 다양한 이벤트가 발생했을 때 사용자에게 이메일 또는 인앱 알림을 발송하는 상황을 가정합니다.
 
 알림 요청 API는 실제 발송을 즉시 수행하지 않고 DB에 저장하며, 별도 Processor가 저장된 요청을 조회하여 비동기적으로 처리합니다.
 
@@ -44,7 +44,7 @@ Backend
 
 # 실행 방법
 
-## DB 생성
+DB 생성:
 
 ```sql
 CREATE DATABASE notification_db;
@@ -76,7 +76,7 @@ http://localhost:8080/swagger-ui/index.html
 
 ## Swagger API 문서
 
-JWT 토큰 발급, 알림 등록, 상태 조회 등의 API를 Swagger를 통해 확인할 수 있습니다.
+JWT 토큰 발급, 알림 등록, 상태 조회 등을 Swagger에서 확인할 수 있습니다.
 
 ![Swagger](docs/swagger-v2.png)
 
@@ -92,17 +92,17 @@ JWT 토큰 발급, 알림 등록, 상태 조회 등의 API를 Swagger를 통해 
 
 ## 관리자 대시보드
 
-실패 알림 모니터링과 상태 확인을 위한 관리자 화면입니다.
+실패 알림 모니터링 및 상태 확인 화면입니다.
 
 ![Dashboard](docs/dashboard-v2.png)
 
 제공 기능:
 
-- FAILED 알림 조회
-- PROCESSING 상태 모니터링
-- REQUESTED 상태 확인
-- 전체 알림 JSON 조회
-- 수동 재시도
+- FAILED 조회
+- REQUESTED 조회
+- PROCESSING 조회
+- 전체 알림 JSON
+- 상태 모니터링
 
 ---
 
@@ -112,16 +112,16 @@ JWT 토큰 발급, 알림 등록, 상태 조회 등의 API를 Swagger를 통해 
 
 - 알림 요청 API는 요청 접수만 수행
 - 실제 발송은 비동기 처리
-- 실패 시 재시도 가능해야 함
-- 서버 재시작 후 복구 가능해야 함
+- 실패 시 재시도 가능
+- 서버 재시작 후 복구 가능
 - 동일 이벤트 중복 저장 방지
-- 실제 브로커 없이 향후 Kafka/RabbitMQ 확장 가능해야 함
+- 실제 브로커 없이 향후 Kafka/RabbitMQ 확장 가능
 
 ---
 
 # 설계 결정과 이유
 
-## DB Polling 기반 비동기 처리
+## 1. DB Polling 기반 비동기 처리
 
 실제 메시지 브로커 없이 구현해야 하는 과제 조건 때문에 DB Polling 구조를 선택했습니다.
 
@@ -129,11 +129,11 @@ JWT 토큰 발급, 알림 등록, 상태 조회 등의 API를 Swagger를 통해 
 
 - API 응답 빠름
 - 장애 복구 가능
-- 추후 메시지 브로커 확장 가능
+- 메시지 브로커 확장 가능
 
 ---
 
-## 상태 기반 처리
+## 2. 상태 기반 처리
 
 알림 상태:
 
@@ -162,7 +162,7 @@ PROCESSING
 
 ---
 
-## 실패 정보 저장
+## 3. 실패 정보 저장
 
 실패 시 저장:
 
@@ -174,9 +174,36 @@ nextRetryAt
 
 ---
 
-## 중복 방지
+## 4. 반복 실패 사용자 요청 차단
 
-현재 기준:
+반복적으로 실패 이력이 누적된 사용자는 새로운 알림 요청 자체를 저장하지 않습니다.
+
+현재 정책:
+
+```text
+FAILED >= 10
+```
+
+인 경우:
+
+```text
+새 REQUESTED 저장 안 함
+```
+
+효과:
+
+- 불필요한 DB 저장 감소
+- Processor 조회 감소
+- 재시도 비용 감소
+- 반복 실패 사용자 처리 비용 감소
+
+즉, 실패 가능성이 높은 요청은 접수 단계에서 차단하여 전체 비용을 줄였습니다.
+
+---
+
+## 5. 중복 방지
+
+현재 중복 기준:
 
 ```text
 receiverId + eventId
@@ -186,9 +213,9 @@ receiverId + eventId
 
 ---
 
-## JWT 인증
+## 6. JWT 인증
 
-JWT 기반 관리자 인증 구현:
+JWT 기반 관리자 인증 구현
 
 토큰 발급:
 
@@ -282,7 +309,7 @@ PROCESSING
 
 ### 장애 복구
 
-PROCESSING 상태 장시간 유지 시 재처리
+PROCESSING 장시간 지속 시 재처리
 
 ---
 
@@ -305,44 +332,34 @@ retryCount
 
 # API 목록 및 예시
 
-## 알림 요청
+알림 요청:
 
 ```http
 POST /notifications
 ```
 
-요청:
-
-```json
-{
- "receiverId":"user1",
- "eventId":"PAYMENT_SUCCESS",
- "channel":"EMAIL"
-}
-```
-
----
-
-## 상태 조회
+상태 조회:
 
 ```http
 GET /notifications/{id}
 ```
 
----
-
-## 읽음 처리
+읽음 처리:
 
 ```http
 PATCH /notifications/{id}/read
 ```
 
----
-
-## 재시도
+재시도:
 
 ```http
 PATCH /notifications/{id}/retry
+```
+
+JWT:
+
+```http
+POST /auth/token
 ```
 
 ---
@@ -358,7 +375,7 @@ Notification 주요 필드
 | eventId | 이벤트 |
 | status | 상태 |
 | retryCount | 재시도 |
-| failureReason | 실패 사유 |
+| failureReason | 실패 이유 |
 | nextRetryAt | 재시도 예정 |
 | readStatus | 읽음 여부 |
 | version | 낙관적 락 |
@@ -378,6 +395,7 @@ Notification 주요 필드
 - 상태 변경
 - 재시도
 - 읽음 처리
+- 반복 실패 사용자 차단
 
 ---
 
@@ -409,7 +427,7 @@ Consumer Group
 AI 활용:
 
 - 요구사항 해석
-- JWT 구조 점검
+- JWT 구조 검토
 - 상태 전이 검토
 - README 구성
 - 테스트 보강 방향 검토
