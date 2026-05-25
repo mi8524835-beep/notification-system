@@ -24,6 +24,14 @@ Spring Boot 기반 이벤트 알림 시스템입니다.
 
 ---
 
+## Dashboard
+
+운영자가 실패 알림 상태를 확인할 수 있는 모니터링 화면
+
+![dashboard](docs/dashboard.png)
+
+---
+
 # 기술 스택
 
 - Java 17
