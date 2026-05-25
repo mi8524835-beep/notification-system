@@ -8,11 +8,19 @@ import java.util.Optional;
 
 import notification_system.domain.NotificationStatus;
 
+import notification_system.domain.NotificationChannel;
+
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
-    Optional<Notification> findByReceiverIdAndEventId(
+    Optional<Notification>
+    findByReceiverIdAndEventIdAndChannel(
+
             String receiverId,
-            String eventId
+
+            String eventId,
+
+            NotificationChannel channel
+
     );
 
     List<Notification> findByReceiverId(String receiverId);

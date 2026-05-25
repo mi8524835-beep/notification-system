@@ -35,9 +35,14 @@ public class NotificationService {
             return;
         }
 
-        if (repository.findByReceiverIdAndEventId(
+        if (repository.findByReceiverIdAndEventIdAndChannel(
+
                 notification.getReceiverId(),
-                notification.getEventId()
+
+                notification.getEventId(),
+
+                notification.getChannel()
+
         ).isPresent()) {
 
             System.out.println(
