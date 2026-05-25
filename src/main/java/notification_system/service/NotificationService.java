@@ -4,6 +4,7 @@ import notification_system.domain.Notification;
 import notification_system.repository.NotificationRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import notification_system.domain.NotificationStatus;
 
 @Service
 public class NotificationService {
@@ -34,6 +35,17 @@ public class NotificationService {
         } catch (DataIntegrityViolationException e) {
 
             System.out.println("동시 중복 알림 요청 - 저장하지 않음");
+        }
+
+        long failedCount =
+                repository.countByReceiverIdAndStatus(
+                        notification.getReceiverId(),
+                        NotificationStatus.FAILED
+                );
+
+        if (failedCount >= 10) {
+            System.out.println("반복 실패 사용자 - 알림 요청 차단");
+            return;
         }
     }
 }

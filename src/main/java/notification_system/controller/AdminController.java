@@ -38,6 +38,22 @@ public class AdminController {
                 failed
         );
 
+        model.addAttribute(
+                "failedCount",
+                repository.countByStatus(NotificationStatus.FAILED)
+        );
+
+        model.addAttribute(
+                "processingCount",
+                repository.countByStatus(NotificationStatus.PROCESSING)
+        );
+
+        model.addAttribute(
+                "requestedCount",
+                repository.countByStatus(NotificationStatus.REQUESTED)
+        );
+
         return "admin";
     }
+
 }
