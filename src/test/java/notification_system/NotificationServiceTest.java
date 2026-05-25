@@ -20,9 +20,13 @@ import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.springframework.test.context.ActiveProfiles;
+
+@ActiveProfiles("test")
+
 @SpringBootTest
 class NotificationServiceTest {
-
+    
     @Autowired
     NotificationService service;
 
