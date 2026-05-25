@@ -441,21 +441,52 @@ Notification 주요 필드
 | version | 낙관적 락 |
 
 ---
-
 # 테스트 실행
+
+테스트 실행:
 
 ```bash
 ./gradlew test
 ```
 
-검증:
+테스트는 `test` profile로 실행되며 실제 PostgreSQL 대신 H2 메모리 DB를 사용합니다.
 
-- REQUESTED 저장
-- 중복 방지
-- 상태 변경
-- 재시도
-- 읽음 처리
-- 반복 실패 사용자 차단
+테스트 전용 설정 파일:
+
+```text
+src/test/resources/application-test.properties
+```
+
+주요 설정:
+
+```properties
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.jpa.hibernate.ddl-auto=create-drop
+```
+
+이를 통해 로컬 PostgreSQL 환경이 없어도 테스트를 실행할 수 있도록 구성했습니다.
+
+실행 시 적용 프로필:
+
+```text
+The following 1 profile is active: "test"
+```
+
+검증 항목:
+
+- 알림 요청 시 REQUESTED 상태로 저장되는지
+- 동일 수신자 + 동일 이벤트 + 동일 채널 요청이 중복 저장되지 않는지
+- 동일 이벤트라도 EMAIL / IN_APP 등 다른 채널이면 별도 저장 가능한지
+- 상태 변경이 정상 동작하는지
+- retryCount 변경이 정상 동작하는지
+- 읽음 처리 기능이 동작하는지
+- 반복 실패 사용자의 새 요청이 저장 전에 차단되는지
+
+테스트 결과:
+
+```text
+BUILD SUCCESSFUL
+``` 
 
 ---
 
