@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f6f7fb;
+            padding: 40px;
+            color: #222;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .title {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+
+        .badge {
+            display: inline-block;
+            background: #ffe6e6;
+            color: #d60000;
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        th {
+            background: #f0f2f5;
+            text-align: left;
+            padding: 14px;
+        }
+
+        td {
+            border-top: 1px solid #eee;
+            padding: 14px;
+        }
+
+        tr:hover {
+            background: #fafafa;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: #777;
+        }
+
+        .status {
+            font-weight: bold;
+            color: #d60000;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+
+    <div class="title">실패 알림 대시보드</div>
+    <div class="subtitle">
+        최종 실패 상태의 알림을 운영자가 확인하기 위한 모니터링 화면입니다.
+    </div>
+
+    <div class="card">
+
+        <div class="badge">
+            FAILED Notifications
+        </div>
+
+        <table>
+            <tr>
+                <th>ID</th>
+                <th>Receiver</th>
+                <th>Event</th>
+                <th>Status</th>
+                <th>Failure Reason</th>
+            </tr>
+
+            <tr th:if="${#lists.isEmpty(notifications)}">
+                <td colspan="5" class="empty">
+                    현재 실패 알림이 없습니다.
+                </td>
+            </tr>
+
+            <tr th:each="n : ${notifications}">
+                <td th:text="${n.id}"></td>
+                <td th:text="${n.receiverId}"></td>
+                <td th:text="${n.eventId}"></td>
+                <td class="status" th:text="${n.status}"></td>
+                <td th:text="${n.failureReason}"></td>
+            </tr>
+        </table>
+
+    </div>
+</div>
+</body>
+</html>

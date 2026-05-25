@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import java.util.Optional;
 
+import notification_system.domain.NotificationStatus;
+
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
     Optional<Notification> findByReceiverIdAndEventId(
@@ -18,6 +20,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     List<Notification> findByReceiverIdAndReadStatus(
             String receiverId,
             Boolean readStatus
+    );
+
+    List<Notification>
+    findByStatus(
+            NotificationStatus status
     );
 
 }

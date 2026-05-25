@@ -16,7 +16,9 @@ import jakarta.persistence.EntityTransaction;
 import org.junit.jupiter.api.Assertions;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
-import java.time.LocalDateTime;import static org.assertj.core.api.Assertions.assertThat;
+import java.time.LocalDateTime;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 class NotificationServiceTest {
@@ -37,7 +39,7 @@ class NotificationServiceTest {
 
 
     @Test
-    void 알림저장테스트() {
+    void shouldSaveNotification() {
 
         Notification notification =
                 new Notification(
@@ -60,7 +62,7 @@ class NotificationServiceTest {
 
 
     @Test
-    void 중복알림은저장하지않는다() {
+    void shouldPreventDuplicateNotification() {
 
         Notification first =
                 new Notification(
@@ -90,7 +92,7 @@ class NotificationServiceTest {
 
 
     @Test
-    void 읽음처리테스트() {
+    void shouldMarkNotificationAsRead() {
 
         Notification notification =
                 new Notification(
@@ -110,7 +112,7 @@ class NotificationServiceTest {
 
 
     @Test
-    void 실패시재시도횟수증가() {
+    void shouldIncreaseRetryCountWhenFailed() {
 
         Notification notification =
                 new Notification(
@@ -138,7 +140,7 @@ class NotificationServiceTest {
 
 
     @Test
-    void 상태변경테스트() {
+    void shouldChangeStatusToSent() {
 
         Notification notification =
                 new Notification(
@@ -160,7 +162,7 @@ class NotificationServiceTest {
 
 
     @Test
-    void 템플릿메시지테스트() {
+    void shouldReturnTemplateMessage() {
 
         assertThat(
                 NotificationTemplate.PAYMENT_SUCCESS.getMessage()
@@ -169,7 +171,7 @@ class NotificationServiceTest {
 
 
     @Test
-    void 실패시다음재시도시간이설정된다() {
+    void shouldSetNextRetryTimeWhenFailed() {
 
         Notification notification =
                 new Notification(
@@ -188,7 +190,7 @@ class NotificationServiceTest {
     }
 
     @Test
-    void 이미읽음상태면다시읽음처리해도상태는유지된다() {
+    void shouldRecoverLongProcessingStatus() {
 
         Notification notification =
                 new Notification(
@@ -208,7 +210,7 @@ class NotificationServiceTest {
     }
 
     @Test
-    void 동시에같은알림을수정하면낙관적락이동작한다() {
+    void shouldApplyOptimisticLockWhenSameNotificationIsUpdatedConcurrently() {
 
         Notification notification =
                 new Notification(
@@ -253,7 +255,7 @@ class NotificationServiceTest {
     }
 
     @Test
-    void 처리중상태가30분이상지속되면복구대상이된다() {
+    void shouldDetectLongProcessingStatusAsRecoveryTarget() {
 
         Notification notification =
                 new Notification(

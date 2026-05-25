@@ -10,8 +10,8 @@
 
 중복 발송 방지, 예약 발송, 읽음 처리, 메시지 템플릿,
 재시도 정책, 지수 백오프, 최종 실패 기록,
-운영자 모니터링 로그, 읽음 처리 동시성 대응,
-장기 PROCESSING 상태 복구 로직을 포함합니다.
+운영자 모니터링 로그, 관리자 실패 알림 대시보드,
+읽음 처리 동시성 대응, 장기 PROCESSING 상태 복구 로직을 포함합니다.
 
 ---
 
@@ -25,6 +25,7 @@
 - Gradle
 - JUnit 5
 - AssertJ
+- Thymeleaf
 
 ---
 
@@ -40,6 +41,12 @@
 
 ```bash
 ./gradlew test
+```
+
+관리자 대시보드 접속:
+
+```http
+http://localhost:8080/admin/dashboard
 ```
 
 ---
@@ -210,6 +217,56 @@ Processor는 오래 지속된 PROCESSING 상태를 다시 처리 대상으로 �
 
 ---
 
+### 8. 관리자 실패 알림 대시보드
+
+최종 실패 상태의 알림을 운영자가 확인할 수 있도록
+간단한 관리자 대시보드를 추가했습니다.
+
+```http
+GET /admin/dashboard
+```
+
+실패 알림이 없을 경우에는
+빈 화면 대신 안내 문구를 표시합니다.
+
+```text
+현재 실패 알림이 없습니다.
+```
+
+---
+
+### 9. 테스트 코드 네이밍 컨벤션 정리
+
+초기 테스트 코드는 한글 메서드명을 사용했습니다.
+
+예:
+
+```text
+실패시재시도횟수증가()
+읽음처리테스트()
+```
+
+기능 이해 측면에서는 장점이 있었지만,
+협업 환경과 일반적인 Java 테스트 네이밍 관례를 고려하여
+영문 기반 메서드명으로 변경했습니다.
+
+변경 예:
+
+```text
+실패시재시도횟수증가()
+↓
+shouldIncreaseRetryCountWhenFailed()
+```
+
+목적:
+
+- 협업 시 가독성 향상
+- IDE 검색 편의성
+- 테스트 의도 명확화
+- 일반적인 Java/Spring 테스트 관례 반영
+
+---
+
 ## API 명세 및 샘플 요청/응답
 
 ### 1. 알림 생성
@@ -295,9 +352,7 @@ Response 예시:
     "failureReason":null,
     "nextRetryAt":null,
     "processingStartedAt":null,
-    "version":0,
-    "readyToSend":true,
-    "readyToRetry":true
+    "version":0
   }
 ]
 ```
@@ -310,26 +365,6 @@ Response 예시:
 GET /notifications/{id}
 ```
 
-Response 예시:
-
-```json
-{
-  "id":1,
-  "receiverId":"민경",
-  "eventId":"PAYMENT_SUCCESS",
-  "message":"결제가 완료되었습니다.",
-  "channel":"EMAIL",
-  "status":"SENT",
-  "retryCount":0,
-  "readStatus":false,
-  "scheduledAt":null,
-  "failureReason":null,
-  "nextRetryAt":null,
-  "processingStartedAt":null,
-  "version":0
-}
-```
-
 ---
 
 ### 5. 사용자별 알림 조회
@@ -338,42 +373,12 @@ Response 예시:
 GET /users/{receiverId}/notifications
 ```
 
-Response 예시:
-
-```json
-[
-  {
-    "id":1,
-    "receiverId":"민경",
-    "eventId":"PAYMENT_SUCCESS",
-    "message":"결제가 완료되었습니다.",
-    "status":"SENT",
-    "readStatus":false
-  }
-]
-```
-
 ---
 
 ### 6. 읽음 여부 필터 조회
 
 ```http
 GET /users/{receiverId}/notifications?readStatus=true
-```
-
-Response 예시:
-
-```json
-[
-  {
-    "id":1,
-    "receiverId":"민경",
-    "eventId":"PAYMENT_SUCCESS",
-    "message":"결제가 완료되었습니다.",
-    "status":"SENT",
-    "readStatus":true
-  }
-]
 ```
 
 ---
@@ -414,6 +419,19 @@ Response:
 
 - 실패한 알림을 다시 `REQUESTED` 상태로 변경합니다.
 - `retryCount`, `failureReason`, `nextRetryAt`을 초기화합니다.
+
+---
+
+### 9. 관리자 실패 알림 대시보드
+
+```http
+GET /admin/dashboard
+```
+
+설명:
+
+- FAILED 상태의 알림을 운영자가 확인할 수 있는 HTML 화면입니다.
+- 실패 알림이 없으면 안내 문구를 표시합니다.
 
 ---
 
@@ -500,18 +518,18 @@ Consumer
 알림 처리
 ```
 
-메시지 브로커는 사용하지 않았지만,
+메시지 브로커는 직접 설치하지 않았지만,
 요청 저장과 실제 처리 로직을 분리하여
 운영 환경에서 Queue 기반 처리로 전환 가능하도록 설계했습니다.
 
 ---
 
-## 운영자 모니터링 로그
+## 운영자 모니터링
 
 최종 실패 시 사용자에게 다시 알림을 보내지 않고,
-운영자가 확인할 수 있도록 로그를 출력합니다.
+운영자가 확인할 수 있도록 로그와 관리자 화면을 제공합니다.
 
-예시:
+로그 예시:
 
 ```text
 최종 실패 처리 완료
@@ -522,11 +540,11 @@ receiverId: 민경
 failureReason: 이메일 서버 오류
 ```
 
-운영 환경에서는 다음 방식으로 확장할 수 있습니다.
+관리자 화면:
 
-- Slack 알림
-- 관리자 페이지
-- Email 모니터링
+```http
+GET /admin/dashboard
+```
 
 ---
 
@@ -605,16 +623,16 @@ version (@Version)
 
 작성 테스트:
 
-- 알림 저장 테스트
-- 중복 방지 테스트
-- 읽음 처리 테스트
-- 실패 시 재시도 횟수 증가 테스트
-- 상태 변경 테스트
-- 템플릿 메시지 테스트
-- 실패 시 다음 재시도 시간 설정 테스트
-- 이미 읽음 상태에서 중복 읽음 처리 테스트
-- 낙관적 락 기반 동시 수정 테스트
-- 장기 PROCESSING 상태 복구 대상 판단 테스트
+- `shouldSaveNotification`
+- `shouldPreventDuplicateNotification`
+- `shouldMarkNotificationAsRead`
+- `shouldIncreaseRetryCountWhenFailed`
+- `shouldChangeStatusToSent`
+- `shouldReturnTemplateMessage`
+- `shouldSetNextRetryTimeWhenFailed`
+- `shouldKeepReadStatusWhenMarkedReadAgain`
+- `shouldApplyOptimisticLockWhenSameNotificationIsUpdatedConcurrently`
+- `shouldDetectLongProcessingStatusAsRecoveryTarget`
 
 테스트 실행 결과:
 
@@ -644,30 +662,32 @@ BUILD SUCCESSFUL
 - [x] 메시지 템플릿
 - [x] 지수 백오프
 - [x] 운영자 모니터링 로그
+- [x] 관리자 실패 알림 대시보드
 - [x] 읽음 처리 동시성 대응
 - [x] 장기 PROCESSING 상태 복구 로직
 - [x] 테스트 코드 작성
+- [x] 테스트 메서드명 영어 컨벤션 정리
 - [x] 운영 시나리오 고려
 
 ---
 
 ## 미구현 / 제약사항
 
-- 실제 이메일 발송은 구현하지 않고 로그 출력으로 대체했습니다.
-- 실제 메시지 브로커(Kafka/RabbitMQ)는 사용하지 않았습니다.
-- 다중 인스턴스 환경의 분산락은 설계 방향만 기술했습니다.
-- 관리자 대시보드는 구현하지 않고 운영자 로그로 대체했습니다.
+- 실제 이메일 발송은 과제 조건에 따라 구현하지 않고 로그 출력으로 대체했습니다.
+- Kafka/RabbitMQ는 직접 설치하지 않았지만, 요청 저장과 처리 로직을 분리하여 Queue 기반 구조로 전환 가능하도록 설계했습니다.
+- 다중 인스턴스 환경은 DB Unique Constraint, 낙관적 락, 상태 기반 처리로 일부 대응했으며, 운영 환경에서는 DB Lock 또는 분산락으로 확장할 수 있습니다.
+- 관리자 기능은 별도 로그인/권한 처리는 생략하고, 최종 실패 알림 확인용 대시보드로 구현했습니다.
 
 ---
 
 ## 개선 가능 사항
 
-- Queue 기반 비동기 처리
-- Slack 연동
-- 관리자 대시보드
-- DB Lock / 분산락 기반 다중 인스턴스 대응
+- Kafka/RabbitMQ 기반 Queue 처리로 확장
+- DB Lock 또는 분산락을 통한 다중 인스턴스 처리 고도화
+- Slack 또는 Email 기반 운영자 알림 연동
+- 관리자 페이지 권한 처리
+- 테스트 DB 분리 또는 Testcontainers 적용
 - 복구 시간 정책 고도화
-- 테스트 환경 분리
 
 ---
 
@@ -709,10 +729,15 @@ Consumer
 
 ### 2. 다중 인스턴스 중복 처리 방지
 
-현재는 단일 서버 기준으로 구현했습니다.
+현재 구현에서는 다음 방식으로 일부 대응했습니다.
 
-운영 환경에서 여러 서버가 동시에 같은 알림을 처리할 경우
-중복 처리가 발생할 수 있으므로 다음 방식이 필요합니다.
+- DB Unique Constraint
+- `@Version` 기반 낙관적 락
+- 상태 기반 처리
+- 장기 PROCESSING 상태 복구
+
+운영 환경에서 여러 서버가 동시에 같은 알림을 처리하는 경우에는
+다음 방식으로 고도화할 수 있습니다.
 
 - DB Lock
 - 분산락
