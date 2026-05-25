@@ -21,6 +21,9 @@ import org.springframework.security.web.SecurityFilterChain;
 
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
@@ -92,6 +95,14 @@ public class SecurityConfig {
         return new InMemoryUserDetailsManager(
                 admin
         );
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(
+            AuthenticationConfiguration configuration
+    ) throws Exception {
+
+        return configuration.getAuthenticationManager();
     }
 
     @Bean

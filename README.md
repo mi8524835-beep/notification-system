@@ -1,161 +1,79 @@
-![CI](https://github.com/mi8524835-beep/notification-system/actions/workflows/ci.yml/badge.svg)
-
 # Notification System
 
-Spring Boot 기반 이벤트 알림 시스템입니다.
+프로덕트 엔지니어 채용 과제 중 **BE-C. 알림 발송 시스템**을 구현한 Spring Boot 기반 백엔드 프로젝트입니다.
 
-이벤트 발생 시 알림 요청을 저장하고, 비동기 처리 / 재시도 / 중복 방지 / 운영 모니터링 / 인증 보안을 고려하여 구현했습니다.
+이 프로젝트는 수강 신청 완료, 결제 확정, 강의 시작 D-1, 취소 처리 등 다양한 이벤트가 발생했을 때 사용자에게 이메일 또는 인앱 알림을 발송하는 상황을 가정합니다.
+
+알림 요청 API는 실제 발송을 즉시 수행하지 않고 요청을 DB에 저장한 뒤, 별도 처리 로직이 저장된 알림을 조회하여 비동기적으로 발송 상태를 관리합니다.
 
 ---
 
-## 주요 기능
+# 프로젝트 개요
 
-- 알림 생성 / 조회
-- 비동기 알림 처리
-- 재시도 정책 + 지수 백오프
-- 예약 발송
+본 시스템은 다음 요구사항을 중심으로 설계했습니다.
+
+- 알림 발송 요청 등록
+- 알림 상태 조회
+- 사용자별 알림 목록 조회
 - 읽음 처리
 - 중복 발송 방지
-- PostgreSQL 영속 저장
-- 낙관적 락 기반 동시성 대응
-- 장기 PROCESSING 상태 복구
-- 관리자 실패 알림 대시보드
-- Spring Security 기반 관리자 보호
-- BCrypt 비밀번호 암호화
-- JWT 토큰 발급
-- JWT 인증 필터
-- Swagger API 문서화
-- GitHub Actions CI 자동 테스트
+- 실패 시 재시도
+- 실패 사유 기록
+- 서버 재시작 후 미처리 알림 재처리
+- 관리자 페이지를 통한 상태 확인 및 수동 재시도
+- JWT 기반 관리자 기능 보호
+
+API 요청 스레드는 알림 요청을 `REQUESTED` 상태로 저장한 뒤 즉시 응답합니다.
+
+실제 발송 처리는 DB에 저장된 알림을 별도 Processor가 조회하여 처리합니다.
 
 ---
 
-## Dashboard
-
-운영자가 실패 알림 상태를 확인할 수 있는 모니터링 화면입니다.
-
-![dashboard](docs/dashboard.png)
-
-제공 기능:
-
-- FAILED 상태 모니터링
-- 상태별 통계 카드
-- 실패 원인 확인
-- JSON 조회 링크
-- 로그아웃 버튼
-
----
-
-## Swagger API
-
-API 명세와 요청 테스트를 Swagger UI에서 확인할 수 있습니다.
-
-![swagger](docs/swagger.png)
-
-```text
-http://localhost:8080/swagger-ui/index.html
-```
-
----
-
-## Security
-
-관리자 대시보드와 API 보호를 위해 Spring Security를 적용했습니다.
-
-구현 내용:
-
-- BCryptPasswordEncoder 기반 비밀번호 암호화
-- ADMIN 권한 기반 관리자 페이지 접근 제어
-- JWT 토큰 발급 API
-- JWT 인증 필터
-- Bearer Token 기반 보호 API 접근
-
-JWT 발급:
-
-```http
-POST /auth/token
-```
-
-Request:
-
-```json
-{
-  "username": "admin"
-}
-```
-
-Response:
-
-```text
-eyJhbGciOiJIUzI1NiJ9...
-```
-
-보호 API 요청 예시:
-
-```http
-Authorization: Bearer {token}
-```
-
----
-
-## CI
-
-GitHub Actions 기반 자동 테스트를 적용했습니다.
-
-동작 흐름:
-
-```text
-Push
-↓
-GitHub Actions 실행
-↓
-PostgreSQL 서비스 컨테이너 실행
-↓
-Gradle Test
-↓
-성공 여부 검증
-```
-
----
-
-## 기술 스택
+# 기술 스택
 
 - Java 17
 - Spring Boot
+- Spring Web
 - Spring Data JPA
 - Spring Security
 - JWT
-- BCrypt
 - PostgreSQL
+- H2
 - Thymeleaf
 - Swagger / Springdoc OpenAPI
-- JUnit5
-- AssertJ
 - Gradle
-- GitHub Actions
+- JUnit5
 
 ---
 
-## 실행 방법
+# 실행 방법
 
-실행:
+## 1. PostgreSQL DB 생성
+
+```sql
+CREATE DATABASE notification_db;
+```
+
+## 2. application.properties 설정
+
+```properties
+spring.datasource.url=jdbc:postgresql://localhost:5432/notification_db
+spring.datasource.username=본인계정
+spring.datasource.password=비밀번호
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+```
+
+## 3. 실행
 
 ```bash
 ./gradlew bootRun
 ```
 
-테스트:
+또는 IntelliJ에서 실행
 
-```bash
-./gradlew test
-```
-
-관리자 화면:
-
-```text
-http://localhost:8080/admin/dashboard
-```
-
-Swagger:
+## 4. Swagger
 
 ```text
 http://localhost:8080/swagger-ui/index.html
@@ -163,25 +81,38 @@ http://localhost:8080/swagger-ui/index.html
 
 ---
 
-## 아키텍처 흐름
+# 요구사항 해석 및 가정
 
-```text
-API 요청
-↓
-REQUESTED 저장
-↓
-Processor 처리
-↓
-PROCESSING
-↓
-SENT / FAILED
-↓
-Retry / Recovery
-```
+과제 요구사항을 다음과 같이 해석했습니다.
+
+- 알림 요청 API는 발송 성공 여부를 기다리지 않고 요청 접수만 수행해야 한다.
+- 실패한 알림은 단순 무시하지 않고 재시도 가능하도록 저장해야 한다.
+- 서버 재시작 이후에도 미처리 알림이 복구 가능해야 한다.
+- 동일 이벤트는 중복 저장되지 않아야 한다.
+- 실제 메시지 브로커 없이도 향후 Kafka / RabbitMQ 구조로 확장 가능해야 한다.
+- 인증은 과제 핵심 요구사항은 아니지만 관리자 기능 보호를 위해 JWT를 적용했다.
 
 ---
 
-## 알림 상태
+# 설계 결정과 이유
+
+## 1. DB 기반 비동기 처리 선택
+
+실제 메시지 브로커 없이 구현해야 하는 과제 제약을 고려하여 DB Polling 방식을 선택했습니다.
+
+요청 저장과 발송 처리를 분리하여:
+
+- API 응답 속도 보장
+- 서버 장애 시 재처리 가능
+- 메시지 브로커 구조로 확장 가능
+
+하도록 설계했습니다.
+
+---
+
+## 2. 상태 기반 처리
+
+알림 상태를 다음처럼 정의했습니다.
 
 ```text
 REQUESTED
@@ -190,162 +121,268 @@ SENT
 FAILED
 ```
 
+상태 전이를 통해:
+
+- 처리 가능 여부
+- 재시도 여부
+- 장애 복구 여부
+
+를 판단합니다.
+
+상태 흐름:
+
+```text
+REQUESTED
+ ↓
+PROCESSING
+ ↓ 성공
+SENT
+
+PROCESSING
+ ↓ 실패
+FAILED
+ ↓ 재시도
+PROCESSING
+```
+
 ---
 
-## 핵심 설계
+## 3. 실패 정보 저장
 
-### 요청 저장과 처리 분리
+실패 시 단순히 예외를 무시하지 않고 저장합니다.
 
-알림 요청을 즉시 발송하지 않고 DB에 먼저 저장합니다.
+저장 정보:
 
-목적:
-
-- 비즈니스 트랜잭션 보호
-- 장애 격리
-- 재시도 가능
-- 운영 추적 가능
+- failureReason
+- retryCount
+- nextRetryAt
 
 ---
 
-### 중복 발송 방지
+## 4. 중복 발송 방지
 
-중복 기준:
+현재 중복 기준:
 
 ```text
 receiverId + eventId
 ```
 
-적용:
+이미 존재하면 저장하지 않습니다.
 
-- Service 중복 체크
-- DB Unique Constraint
-- 테스트 검증
+예:
+
+같은 사용자에게
+
+```text
+PAYMENT_SUCCESS
+```
+
+알림이 이미 있으면 재요청 시 무시됩니다.
 
 ---
 
-### 실패 재시도 정책
+## 5. JWT 기반 관리자 인증
+
+관리자 기능 보호를 위해 JWT 인증을 적용했습니다.
+
+JWT 발급:
+
+```http
+POST /auth/token
+```
+
+요청:
+
+```json
+{
+  "username":"admin",
+  "password":"admin1234"
+}
+```
+
+JWT에는 사용자 권한이 포함되며:
+
+```text
+ROLE_ADMIN
+```
+
+필터에서 권한을 복원하여:
+
+```text
+/admin/**
+```
+
+접근을 제한합니다.
+
+---
+
+# 비동기 처리 구조
+
+```text
+Client
+ ↓
+
+Notification API
+ ↓
+
+DB 저장
+REQUESTED
+ ↓
+
+Notification Processor
+ ↓
+
+PROCESSING
+ ↓
+
+Mock Sender
+ ↓
+
+SENT / FAILED
+```
+
+API는 요청 저장만 수행하고 실제 발송은 별도 처리됩니다.
+
+---
+
+# 재시도 정책
 
 실패 시:
 
 ```text
 retryCount 증가
 failureReason 저장
-nextRetryAt 계산
+nextRetryAt 저장
 ```
 
-재시도 간격:
+재시도 가능 시점 이후 다시 처리 대상이 됩니다.
 
-```text
-1회 실패 → 5초
-2회 실패 → 30초
-3회 실패 → 5분
-```
+최대 재시도 초과 시 실패 상태로 유지됩니다.
+
+운영자는 수동 재시도를 수행할 수 있습니다.
 
 ---
 
-### 장기 PROCESSING 복구
+# 운영 시나리오 대응
 
-서버 장애 등으로 PROCESSING 상태가 오래 유지될 수 있는 상황을 고려했습니다.
+## 서버 재시작
+
+DB에 저장된:
 
 ```text
+REQUESTED
+FAILED
 PROCESSING
-+
-30분 이상 지속
-↓
-복구 대상
 ```
+
+상태를 다시 조회하여 재처리할 수 있습니다.
 
 ---
 
-### 동시성 대응
+## 장애 복구
 
-Notification 엔티티에 낙관적 락을 적용했습니다.
-
-```java
-@Version
-private Long version;
-```
-
-목적:
-
-- 동일 알림 동시 수정 방지
-- 읽음 처리 충돌 감지
+PROCESSING 상태가 일정 시간 이상 지속되면 장애로 판단하고 재처리 대상에 포함합니다.
 
 ---
 
-## API 명세
+## 실패 이력 보존
 
-### 알림 생성
+예외를 무시하지 않고:
+
+```text
+failureReason
+retryCount
+```
+
+를 저장합니다.
+
+---
+
+## 수동 재시도
+
+관리자는 실패 알림을 REQUESTED 상태로 변경하여 재처리 가능합니다.
+
+---
+
+# API 목록 및 예시
+
+## 알림 요청
 
 ```http
 POST /notifications
 ```
 
-### 전체 조회
+요청:
 
-```http
-GET /notifications
+```json
+{
+ "receiverId":"user1",
+ "eventId":"PAYMENT_SUCCESS",
+ "channel":"EMAIL"
+}
 ```
 
-### 단건 조회
+응답:
+
+```text
+알림 요청 접수
+```
+
+---
+
+## 알림 상태 조회
 
 ```http
 GET /notifications/{id}
 ```
 
-### 사용자별 조회
+---
+
+## 사용자 알림 조회
 
 ```http
-GET /users/{receiverId}/notifications
+GET /notifications/users/{receiverId}
 ```
 
-### 읽음 처리
+---
+
+## 읽음 처리
 
 ```http
 PATCH /notifications/{id}/read
 ```
 
-### 수동 재시도
+---
+
+## 관리자 페이지
 
 ```http
-PATCH /notifications/{id}/retry
-```
-
-### JWT 토큰 발급
-
-```http
-POST /auth/token
-```
-
-### 관리자 대시보드
-
-```http
-GET /admin/dashboard
+GET /admin
+Authorization: Bearer {token}
 ```
 
 ---
 
-## DB 모델
+# 데이터 모델 설명
 
-| 컬럼 | 설명 |
-|---|---|
-| id | PK |
-| receiverId | 수신자 ID |
-| eventId | 이벤트 ID |
-| message | 알림 메시지 |
-| status | REQUESTED / PROCESSING / SENT / FAILED |
-| retryCount | 재시도 횟수 |
-| failureReason | 실패 사유 |
-| nextRetryAt | 다음 재시도 가능 시간 |
-| scheduledAt | 예약 발송 시간 |
-| processingStartedAt | 처리 시작 시간 |
-| readStatus | 읽음 여부 |
+Notification Entity 주요 필드
+
+| 필드 | 설명 |
+|------|------|
+| id | 알림 ID |
+| receiverId | 수신자 |
+| eventId | 이벤트 |
 | channel | EMAIL / IN_APP |
-| version | 낙관적 락 버전 |
+| status | 상태 |
+| retryCount | 재시도 횟수 |
+| failureReason | 실패 이유 |
+| nextRetryAt | 재시도 예정 |
+| readStatus | 읽음 여부 |
+| version | 낙관적 락 |
 
 ---
 
-## 테스트
+# 테스트 실행 방법
 
 실행:
 
@@ -353,63 +390,46 @@ GET /admin/dashboard
 ./gradlew test
 ```
 
-검증 항목:
+현재 테스트 검증 항목:
 
-- 알림 저장
-- 중복 알림 방지
-- 실패 시 재시도 횟수 증가
+- REQUESTED 저장
+- 중복 방지
 - 읽음 처리
-- 낙관적 락 동작
-- 장기 PROCESSING 복구 대상 판별
-- 운영 보호 정책
+- 상태 변경
+- 재시도 로직
 
 ---
 
-## 구현 완료
+# 미구현 / 제약사항
 
-- [x] 알림 생성
-- [x] 전체 조회
-- [x] 단건 조회
-- [x] 사용자 조회
-- [x] 읽음 처리
-- [x] 예약 발송
-- [x] 재시도
-- [x] 지수 백오프
-- [x] 중복 방지
-- [x] PostgreSQL 저장
-- [x] 비동기 처리
-- [x] 관리자 대시보드
-- [x] Swagger API 문서화
-- [x] GitHub Actions CI
-- [x] Spring Security
-- [x] BCrypt 비밀번호 암호화
-- [x] JWT 토큰 발급
-- [x] JWT 인증 필터
-- [x] 보호 API 인증 검증
+현재 구현하지 않은 부분:
 
----
-
-## 미구현 / 개선 가능 사항
-
-- User DB 기반 로그인
+- 실제 이메일 서버 연동
+- Kafka / RabbitMQ
+- Redis Lock
 - Refresh Token
-- 관리자 / 일반 사용자 권한 분리 고도화
-- Kafka / RabbitMQ Queue 적용
-- Redis 기반 토큰 관리
-- Slack 운영 알림
-- Docker Compose 실행 환경
-- Testcontainers 기반 테스트 환경 분리
+- 다중 인스턴스 완전 경쟁 제어
+
+향후:
+
+```text
+SELECT FOR UPDATE
+SKIP LOCKED
+Consumer Group
+```
+
+등으로 확장 가능
 
 ---
 
-## AI 활용 범위
+# AI 활용 범위
 
-ChatGPT를 다음 범위에서 활용했습니다.
+AI를 다음 영역에 활용했습니다.
 
-- 구조 설계 아이디어
-- 테스트 아이디어
-- README 정리
-- 운영 시나리오 정리
-- 에러 로그 분석 보조
+- 요구사항 해석
+- README 구성
+- JWT 구조 검토
+- 상태 전이 정책 검토
+- 테스트 보강 방향 검토
 
-최종 구현, 수정, 실행, 테스트 검증은 직접 수행했습니다.
+최종 구현 및 검증은 직접 수행했습니다.
