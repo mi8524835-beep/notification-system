@@ -203,13 +203,73 @@ FAILED >= 10
 
 ## 5. 중복 방지
 
-현재 중복 기준:
+동일한 알림이 여러 번 발송되는 것을 방지하기 위해 중복 기준(idempotency)을 정의했습니다.
+
+현재 중복 판단 기준:
 
 ```text
-receiverId + eventId
+receiverId + eventId + channel
 ```
 
-동일 이벤트는 저장하지 않습니다.
+즉 아래 조건이 모두 같으면 중복 요청으로 판단합니다.
+
+- 동일 수신자(receiverId)
+- 동일 이벤트(eventId)
+- 동일 발송 채널(channel)
+
+예시:
+
+기존 저장:
+
+```text
+receiverId = user1
+eventId = PAYMENT_SUCCESS
+channel = EMAIL
+```
+
+새 요청:
+
+```text
+receiverId = user1
+eventId = PAYMENT_SUCCESS
+channel = EMAIL
+```
+
+결과:
+
+```text
+중복 요청
+→ 저장하지 않음
+```
+
+반면:
+
+기존 저장:
+
+```text
+receiverId = user1
+eventId = PAYMENT_SUCCESS
+channel = EMAIL
+```
+
+새 요청:
+
+```text
+receiverId = user1
+eventId = PAYMENT_SUCCESS
+channel = IN_APP
+```
+
+결과:
+
+```text
+다른 채널
+→ 저장 허용
+```
+
+이를 통해 동일 채널 내 중복 발송은 방지하면서도 하나의 이벤트를 이메일, 인앱 등 여러 채널로 발송할 수 있도록 설계했습니다.
+
+또한 동시 요청 상황에서는 `DataIntegrityViolationException` 처리를 통해 중복 저장 가능성을 추가로 방지하도록 구현했습니다.
 
 ---
 
