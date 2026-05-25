@@ -78,7 +78,7 @@ http://localhost:8080/swagger-ui/index.html
 
 JWT 토큰 발급, 알림 등록, 상태 조회 등의 API를 Swagger를 통해 확인할 수 있습니다.
 
-![Swagger](docs/swagger.png)
+![Swagger](docs/swagger.png?raw=true)
 
 지원 API:
 
